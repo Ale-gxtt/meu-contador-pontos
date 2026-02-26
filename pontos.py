@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from streamlit_local_storage import LocalStorage
 
 st.set_page_config(page_title="Controle de Produção", page_icon="📈")
@@ -13,6 +13,16 @@ TABELA_PESOS = {
     "RETIRADA": 0.38, "Retirada de Repetidor": 0.38, "Retirada MESH": 0.38,
     "Retirada Roku": 0.38, "Roku": 0.40, "SOLICITAÇÃO DE SERVIÇO": 0.60, "SUPORTE": 0.70
 }
+
+# FUNÇÃO PARA CONTAR DIAS ÚTEIS (EXCLUINDO DOMINGOS)
+def contar_dias_sem_domingo(inicio, fim):
+    dias = 0
+    atual = inicio
+    while atual <= fim:
+        if atual.weekday() != 6:  # 6 representa o Domingo em Python
+            dias += 1
+        atual += timedelta(days=1)
+    return dias
 
 st.title("📈 Controle de Produção")
 
@@ -40,31 +50,35 @@ if dados_salvos:
     
     total_acumulado = df['Pontos'].sum()
     data_inicio = df['Data_dt'].min()
-    dias_corridos = (datetime.now() - data_inicio).days + 1
-    media_diaria = total_acumulado / dias_corridos
+    data_hoje = datetime.now()
+    
+    # NOVO CÁLCULO: Ignora os domingos no divisor da média
+    dias_corridos_uteis = contar_dias_sem_domingo(data_inicio, data_hoje)
+    
+    # Evita divisão por zero
+    divisor = dias_corridos_uteis if dias_corridos_uteis > 0 else 1
+    media_diaria = total_acumulado / divisor
 
-    # --- SISTEMA DE MENSAGENS POR MÉDIA ---
+    # --- STATUS DE PERFORMANCE ---
     st.subheader("🎯 Status de Performance")
     
     if media_diaria >= 3.2:
-        st.success(f"🔥 **MÉDIA EXCELENTE: {media_diaria:.2f}**\n\nParabéns! Você está acima da meta de 3.2. Continue assim!")
-        st.balloons() # Efeito de balões para quem está na meta
+        st.success(f"✅ **MÉDIA EXCELENTE: {media_diaria:.2f}**\n\nMeta batida! (Domingos não contabilizados)")
     elif media_diaria >= 2.8:
-        st.warning(f"⚡ **QUASE LÁ: {media_diaria:.2f}**\n\nSua média está boa, falta pouco para alcançar os 3.2. Você consegue!")
+        st.warning(f"⚡ **QUASE LÁ: {media_diaria:.2f}**\n\nFalta pouco para os 3.2. Você consegue!")
     elif media_diaria >= 2.0:
-        st.info(f"⚠️ **ATENÇÃO: {media_diaria:.2f}**\n\nMédia um pouco baixa. Vamos acelerar os atendimentos para subir esse número!")
+        st.info(f"⚠️ **ATENÇÃO: {media_diaria:.2f}**\n\nMédia abaixo do esperado. Vamos acelerar!")
     else:
-        st.error(f"🚨 **ALERTA: {media_diaria:.2f}**\n\nMédia muito abaixo do esperado. Foco total para recuperar a produção!")
+        st.error(f"🚨 **ALERTA CRÍTICO: {media_diaria:.2f}**\n\nProdução muito baixa. Foco total!")
 
-    # Métricas visuais
     col1, col2, col3 = st.columns(3)
     col1.metric("Acumulado", f"{total_acumulado:.2f}")
     col2.metric("Média Real", f"{media_diaria:.2f}", delta=round(media_diaria - 3.2, 2))
-    col3.metric("Dias", f"{dias_corridos}")
+    col3.metric("Dias (Úteis)", f"{dias_corridos_uteis}")
 
+    st.caption(f"Ciclo iniciado em {data_inicio.strftime('%d/%m')}. Domingos foram removidos do cálculo.")
     st.divider()
     
-    # Botão de Exportação
     csv = df.drop(columns=['ID', 'Data_dt']).to_csv(index=False).encode('utf-8')
     st.download_button(label="📥 BAIXAR RELATÓRIO", data=csv, file_name=f"producao_{datetime.now().strftime('%m_%Y')}.csv", mime="text/csv", use_container_width=True)
     
@@ -80,9 +94,9 @@ if dados_salvos:
                 st.rerun()
 
     st.divider()
-    if st.checkbox("Habilitar limpeza (Zerar Ciclo)"):
-        if st.button("🔴 APAGAR TUDO", use_container_width=True):
+    if st.checkbox("Habilitar limpeza"):
+        if st.button("🔴 ZERAR TUDO", use_container_width=True):
             local_storage.deleteAll()
             st.rerun()
 else:
-    st.info("Aguardando lançamentos para calcular sua média...")
+    st.info("Aguardando lançamentos...")
