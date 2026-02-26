@@ -4,7 +4,7 @@ from datetime import datetime
 from streamlit_local_storage import LocalStorage
 
 # Configuração da página
-st.set_page_config(page_title="Contador de Pontos Profissional", page_icon="📊")
+st.set_page_config(page_title="Produção Mensal - 26 Dias", page_icon="📈")
 
 local_storage = LocalStorage()
 
@@ -17,15 +17,15 @@ TABELA_PESOS = {
     "Retirada Roku": 0.38, "Outros": 0.00
 }
 
-st.title("📊 Contador de Pontos")
+st.title("📈 Controle de Produção")
 
 # Recupera dados salvos
 dados_salvos = local_storage.getItem("pontos_tecnico") or []
 
 # Formulário de lançamento
-with st.expander("➕ Lançar Nova Atividade", expanded=True):
-    atividade_sel = st.selectbox("Selecione a Atividade:", list(TABELA_PESOS.keys()))
-    if st.button("Confirmar Lançamento", use_container_width=True):
+with st.expander("➕ Registrar Atividade", expanded=True):
+    atividade_sel = st.selectbox("Selecione o serviço:", list(TABELA_PESOS.keys()))
+    if st.button("Salvar Registro", use_container_width=True):
         novo = {
             "ID": datetime.now().strftime("%H%M%S%f"),
             "Data": datetime.now().strftime("%d/%m/%Y"),
@@ -35,7 +35,7 @@ with st.expander("➕ Lançar Nova Atividade", expanded=True):
         }
         dados_salvos.append(novo)
         local_storage.setItem("pontos_tecnico", dados_salvos)
-        st.success("Salvo com sucesso!")
+        st.success("Salvo no histórico mensal!")
         st.rerun()
 
 st.divider()
@@ -43,48 +43,49 @@ st.divider()
 if dados_salvos:
     df = pd.DataFrame(dados_salvos)
     
-    # --- NOVO: CÁLCULO DE SOMA POR DIA E TOTAL ---
-    # Soma total de todos os tempos salvos no celular
-    total_geral = df['Pontos'].sum()
-    
-    # Cálculo da soma de hoje especificamente
+    # Cálculos de Produção
+    total_acumulado = df['Pontos'].sum()
     hoje = datetime.now().strftime("%d/%m/%Y")
     total_hoje = df[df['Data'] == hoje]['Pontos'].sum()
+    dias_trabalhados = df['Data'].nunique()
 
-    # Exibição das métricas
-    col_a, col_b = st.columns(2)
-    col_a.metric("Total Hoje", f"{total_hoje:.2f}")
-    col_b.metric("Soma Acumulada", f"{total_geral:.2f}")
+    # Painel de Resumo
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Hoje", f"{total_hoje:.2f}")
+    col2.metric("Acumulado", f"{total_acumulado:.2f}")
+    col3.metric("Dias Ativos", f"{dias_trabalhados}/26")
 
-    # Botão de Download
+    # Botão de Download do Fechamento
     csv = df.drop(columns=['ID']).to_csv(index=False).encode('utf-8')
     st.download_button(
-        label="📥 BAIXAR RELATÓRIO COMPLETO",
+        label="📥 BAIXAR FECHAMENTO (CSV)",
         data=csv,
-        file_name=f"relatorio_pontos_{datetime.now().strftime('%d_%m')}.csv",
+        file_name=f"producao_mensal_{datetime.now().strftime('%m_%Y')}.csv",
         mime="text/csv",
         use_container_width=True
     )
     
-    st.subheader("📜 Histórico de Lançamentos")
+    st.subheader("📋 Histórico Completo")
     
-    # Lista com opção de excluir
-    for i, item in enumerate(dados_salvos):
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            st.write(f"📅 {item['Data']} | **{item['Atividade']}** | {item['Pontos']} pts")
-        with col2:
-            if st.button("🗑️", key=f"del_{item['ID']}"):
-                dados_salvos.pop(i)
+    # Exibição compacta para muitos dias
+    for i, item in enumerate(reversed(dados_salvos)): # Mostra os mais recentes primeiro
+        with st.container():
+            c1, c2 = st.columns([5, 1])
+            c1.write(f"**{item['Data']}** - {item['Atividade']} ({item['Pontos']} pts)")
+            if c2.button("🗑️", key=f"del_{item['ID']}"):
+                # Localiza o índice original para deletar
+                idx_to_del = len(dados_salvos) - 1 - i
+                dados_salvos.pop(idx_to_del)
                 local_storage.setItem("pontos_tecnico", dados_salvos)
                 st.rerun()
 
     st.divider()
 
-    # Botão para Limpar com Confirmação
-    if st.checkbox("Habilitar limpeza (Zerar tudo)"):
-        if st.button("🔴 APAGAR TODOS OS DADOS", use_container_width=True):
+    # Trava para zerar o mês
+    st.warning("Atenção: A opção abaixo apaga todos os 26 dias de uma vez.")
+    if st.checkbox("Confirmar encerramento do período mensal"):
+        if st.button("🔴 ZERAR TUDO E RECOMEÇAR MÊS", use_container_width=True):
             local_storage.deleteAll()
             st.rerun()
 else:
-    st.info("Nenhum dado salvo no aparelho.")
+    st.info("Inicie seus lançamentos. Os dados ficarão salvos por todo o mês neste aparelho.")
