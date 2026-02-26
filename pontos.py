@@ -4,9 +4,8 @@ from datetime import datetime
 from streamlit_local_storage import LocalStorage
 
 # Configuração da página
-st.set_page_config(page_title="Contador de Pontos Seguro", page_icon="🛡️")
+st.set_page_config(page_title="Contador de Pontos Profissional", page_icon="📊")
 
-# Inicializa o armazenamento local
 local_storage = LocalStorage()
 
 # Tabela oficial de pesos
@@ -18,13 +17,13 @@ TABELA_PESOS = {
     "Retirada Roku": 0.38, "Outros": 0.00
 }
 
-st.title("🛡️ Contador de Pontos")
+st.title("📊 Contador de Pontos")
 
-# Recupera dados salvos no aparelho
+# Recupera dados salvos
 dados_salvos = local_storage.getItem("pontos_tecnico") or []
 
 # Formulário de lançamento
-with st.expander("➕ Lançar Atividade", expanded=True):
+with st.expander("➕ Lançar Nova Atividade", expanded=True):
     atividade_sel = st.selectbox("Selecione a Atividade:", list(TABELA_PESOS.keys()))
     if st.button("Confirmar Lançamento", use_container_width=True):
         novo = {
@@ -41,31 +40,39 @@ with st.expander("➕ Lançar Atividade", expanded=True):
 
 st.divider()
 
-# Exibição do histórico e resultados
 if dados_salvos:
     df = pd.DataFrame(dados_salvos)
     
-    # Métrica de Total
-    total_dia = df['Pontos'].sum()
-    st.metric("Total Acumulado", f"{total_dia:.2f} pts")
+    # --- NOVO: CÁLCULO DE SOMA POR DIA E TOTAL ---
+    # Soma total de todos os tempos salvos no celular
+    total_geral = df['Pontos'].sum()
     
-    # Botão de Download (Voltou para cá!)
+    # Cálculo da soma de hoje especificamente
+    hoje = datetime.now().strftime("%d/%m/%Y")
+    total_hoje = df[df['Data'] == hoje]['Pontos'].sum()
+
+    # Exibição das métricas
+    col_a, col_b = st.columns(2)
+    col_a.metric("Total Hoje", f"{total_hoje:.2f}")
+    col_b.metric("Soma Acumulada", f"{total_geral:.2f}")
+
+    # Botão de Download
     csv = df.drop(columns=['ID']).to_csv(index=False).encode('utf-8')
     st.download_button(
-        label="📥 BAIXAR RELATÓRIO DO DIA",
+        label="📥 BAIXAR RELATÓRIO COMPLETO",
         data=csv,
-        file_name=f"pontos_{datetime.now().strftime('%d_%m')}.csv",
+        file_name=f"relatorio_pontos_{datetime.now().strftime('%d_%m')}.csv",
         mime="text/csv",
         use_container_width=True
     )
     
-    st.subheader("📜 Detalhes salvos no aparelho")
+    st.subheader("📜 Histórico de Lançamentos")
     
-    # Lista de atividades com opção de excluir individual
+    # Lista com opção de excluir
     for i, item in enumerate(dados_salvos):
         col1, col2 = st.columns([4, 1])
         with col1:
-            st.write(f"**{item['Atividade']}** ({item['Hora']}) - {item['Pontos']} pts")
+            st.write(f"📅 {item['Data']} | **{item['Atividade']}** | {item['Pontos']} pts")
         with col2:
             if st.button("🗑️", key=f"del_{item['ID']}"):
                 dados_salvos.pop(i)
@@ -75,8 +82,8 @@ if dados_salvos:
     st.divider()
 
     # Botão para Limpar com Confirmação
-    if st.checkbox("Habilitar limpeza de dados (Novo Dia)"):
-        if st.button("🔴 APAGAR TUDO E RECOMEÇAR", use_container_width=True):
+    if st.checkbox("Habilitar limpeza (Zerar tudo)"):
+        if st.button("🔴 APAGAR TODOS OS DADOS", use_container_width=True):
             local_storage.deleteAll()
             st.rerun()
 else:
