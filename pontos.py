@@ -38,35 +38,35 @@ if dados_salvos:
     df = pd.DataFrame(dados_salvos)
     df['Data_dt'] = pd.to_datetime(df['Data'], format='%d/%m/%Y')
     
-    # 1. Total Acumulado
     total_acumulado = df['Pontos'].sum()
-    
-    # 2. Cálculo de Dias Corridos (Considerando dias com 0)
     data_inicio = df['Data_dt'].min()
-    data_hoje = datetime.now()
-    # Diferença de dias + 1 para contar o dia atual
-    dias_corridos = (data_hoje - data_inicio).days + 1
-    
-    # 3. Média (Total dividido por todos os dias desde o início)
+    dias_corridos = (datetime.now() - data_inicio).days + 1
     media_diaria = total_acumulado / dias_corridos
 
-    # Painel de Métricas
+    # --- SISTEMA DE MENSAGENS POR MÉDIA ---
+    st.subheader("🎯 Status de Performance")
+    
+    if media_diaria >= 3.2:
+        st.success(f"🔥 **MÉDIA EXCELENTE: {media_diaria:.2f}**\n\nParabéns! Você está acima da meta de 3.2. Continue assim!")
+        st.balloons() # Efeito de balões para quem está na meta
+    elif media_diaria >= 2.8:
+        st.warning(f"⚡ **QUASE LÁ: {media_diaria:.2f}**\n\nSua média está boa, falta pouco para alcançar os 3.2. Você consegue!")
+    elif media_diaria >= 2.0:
+        st.info(f"⚠️ **ATENÇÃO: {media_diaria:.2f}**\n\nMédia um pouco baixa. Vamos acelerar os atendimentos para subir esse número!")
+    else:
+        st.error(f"🚨 **ALERTA: {media_diaria:.2f}**\n\nMédia muito abaixo do esperado. Foco total para recuperar a produção!")
+
+    # Métricas visuais
     col1, col2, col3 = st.columns(3)
     col1.metric("Acumulado", f"{total_acumulado:.2f}")
-    col2.metric("Média Real", f"{media_diaria:.2f}")
-    col3.metric("Dias no Ciclo", f"{dias_corridos}")
+    col2.metric("Média Real", f"{media_diaria:.2f}", delta=round(media_diaria - 3.2, 2))
+    col3.metric("Dias", f"{dias_corridos}")
 
-    st.caption(f"A média considera todos os {dias_corridos} dias desde o seu primeiro lançamento ({data_inicio.strftime('%d/%m')}).")
-
+    st.divider()
+    
     # Botão de Exportação
     csv = df.drop(columns=['ID', 'Data_dt']).to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 BAIXAR RELATÓRIO",
-        data=csv,
-        file_name=f"producao_{datetime.now().strftime('%m_%Y')}.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
+    st.download_button(label="📥 BAIXAR RELATÓRIO", data=csv, file_name=f"producao_{datetime.now().strftime('%m_%Y')}.csv", mime="text/csv", use_container_width=True)
     
     st.subheader("📋 Histórico")
     for i, item in enumerate(reversed(dados_salvos)):
@@ -85,4 +85,4 @@ if dados_salvos:
             local_storage.deleteAll()
             st.rerun()
 else:
-    st.info("Aguardando lançamentos...")
+    st.info("Aguardando lançamentos para calcular sua média...")
