@@ -1,78 +1,51 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+import os
 from datetime import datetime
 
-st.set_page_config(page_title="Sistema de Produtividade", layout="centered")
+# Configuração da página
+st.set_page_config(page_title="Contador de Pontos Local", page_icon="📊")
 
-# 1. CONEXÃO
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Nome do arquivo de banco de dados local
+ARQUIVO_DADOS = "meus_pontos.csv"
 
-# 2. LOGIN SIMPLES
-if 'autenticado' not in st.session_state:
-    st.session_state.autenticado = False
+# Função para carregar dados
+def carregar_dados():
+    if os.path.exists(ARQUIVO_DADOS):
+        return pd.read_csv(ARQUIVO_DADOS)
+    else:
+        return pd.DataFrame(columns=["Data", "Hora", "Atividade", "Pontos"])
 
-if not st.session_state.autenticado:
-    st.title("🔐 Acesso ao Sistema")
-    usuario = st.text_input("Digite seu Nome ou Matrícula:").strip().upper()
-    senha = st.text_input("Senha:", type="password")  # Você pode definir uma senha padrão
+# Interface
+st.title("📂 Meu Controle de Pontos Local")
 
-    if st.button("Entrar"):
-        if usuario != "" and senha == "123":  # Senha simples para teste
-            st.session_state.autenticado = True
-            st.session_state.usuario = usuario
-            st.rerun()
-        else:
-            st.error("Usuário ou senha inválidos")
-    st.stop()
+# Formulário de entrada
+with st.form("form_pontos", clear_on_submit=True):
+    atividade = st.selectbox("Atividade Realizada:", ["INSTALAÇÃO", "REPARO", "MUDANÇA", "RETIRADA"])
+    submit = st.form_submit_button("Salvar no Dispositivo")
 
-# --- ÁREA LOGADA ---
-st.sidebar.write(f"👤 Usuário: **{st.session_state.usuario}**")
-if st.sidebar.button("Sair"):
-    st.session_state.autenticado = False
-    st.rerun()
-
-# Tabela de Atividades
-atividades = {
-    "INSTALAÇÃO": 1.00, "MIGRAÇÃO DE TECNOLOGIA": 1.00, "MUDANÇA DE ENDEREÇO": 1.00,
-    "SUPORTE": 0.70, "SOLICITAÇÃO DE SERVIÇO": 0.60, "MIGRAÇÃO DE PLANO": 0.50,
-    "Mesh": 0.40, "Repetidor": 0.40, "Roku": 0.40, "CAPEX de Retirada": 0.38,
-    "RETIRADA": 0.38, "Retirada de Repetidor": 0.38, "Retirada MESH": 0.38,
-    "Retirada Roku": 0.38, "Outros": 0.00
-}
-
-st.title("📊 Meus Pontos")
-
-# FORMULÁRIO DE LANÇAMENTO
-with st.form("lancamento"):
-    servico = st.selectbox("Atividade Realizada:", list(atividades.keys()))
-    if st.form_submit_button("Salvar"):
-        df_geral = conn.read(worksheet="Sheet1")
-
-        novo_ponto = pd.DataFrame([{
-            "Usuario": st.session_state.usuario,
+    if submit:
+        # Criar nova linha
+        novo_ponto = {
             "Data": datetime.now().strftime("%d/%m/%Y"),
             "Hora": datetime.now().strftime("%H:%M:%S"),
-            "Atividade": servico,
-            "Pontos": atividades[servico]
-        }])
+            "Atividade": atividade,
+            "Pontos": 10 if atividade == "INSTALAÇÃO" else 5
+        }
+        
+        # Salvar no arquivo local
+        df_atual = carregar_dados()
+        df_novo = pd.concat([df_atual, pd.DataFrame([novo_ponto])], ignore_index=True)
+        df_novo.to_csv(ARQUIVO_DADOS, index=False)
+        st.success("Ponto salvo localmente!")
 
-        df_final = pd.concat([df_geral, novo_ponto], ignore_index=True)
-        conn.update(worksheet="Sheet1", data=df_final)
-        st.success("Registrado com sucesso!")
-
+# Exibir Histórico
 st.divider()
+st.subheader("📜 Histórico Salvo")
+df_historico = carregar_dados()
+st.dataframe(df_historico, use_container_width=True)
 
-# VISUALIZAÇÃO (AQUI ESTÁ O FILTRO DE PRIVACIDADE)
-st.subheader("📅 Meu Histórico")
-data_sel = st.date_input("Filtrar por data:", datetime.now()).strftime("%d/%m/%Y")
-
-# Lemos todos os dados, mas SÓ MOSTRAMOS os do usuário logado
-df_todos = conn.read(worksheet="Sheet1")
-df_filtrado = df_todos[(df_todos["Usuario"] == st.session_state.usuario) & (df_todos["Data"] == data_sel)]
-
-if not df_filtrado.empty:
-    st.metric("Meus Pontos no Dia", f"{df_filtrado['Pontos'].sum():.2f}")
-    st.table(df_filtrado[["Hora", "Atividade", "Pontos"]])
-else:
-    st.info("Você não tem registros para este dia.")
+# Botão para baixar os dados (Backup)
+if not df_historico.empty:
+    csv = df_historico.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Baixar Excel (CSV)", csv, "meus_pontos.csv", "text/csv")
