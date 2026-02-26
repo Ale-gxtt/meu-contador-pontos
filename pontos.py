@@ -3,34 +3,33 @@ import pandas as pd
 from datetime import datetime
 from streamlit_local_storage import LocalStorage
 
-# Configuração da página para Celular
+# Configuração da página
 st.set_page_config(page_title="Controle de Produção Mensal", page_icon="📈")
 
-# Inicializa o armazenamento no disco do navegador
 local_storage = LocalStorage()
 
-# Tabela oficial de pesos e atividades
+# Tabela oficial de pesos conforme sua imagem
 TABELA_PESOS = {
+    "CAPEX de Retirada": 0.38,
     "INSTALAÇÃO": 1.00,
-    "MUDANÇA DE ENDEREÇO": 1.00,
-    "MIGRAÇÃO DE TECNOLOGIA": 1.00,
-    "SUPORTE": 0.70,
-    "SOLICITAÇÃO DE SERVIÇO": 0.60,
-    "MIGRAÇÃO DE PLANO": 0.50,
     "Mesh": 0.40,
+    "MIGRAÇÃO DE PLANO": 0.50,
+    "MIGRAÇÃO DE TECNOLOGIA": 1.00,
+    "MUDANÇA DE ENDEREÇO": 1.00,
+    "Outros": 0.00,
     "Repetidor": 0.40,
+    "RETIRADA": 0.38,
+    "Retirada de Repetidor": 0.38,
+    "Retirada MESH": 0.38,
+    "Retirada Roku": 0.38,
     "Roku": 0.40,
-    "CAPEX de Retirada": 0.38, 
-    "RETIRADA": 0.38, 
-    "Retirada de Repetidor": 0.38, 
-    "Retirada MESH": 0.38, 
-    "Retirada Roku": 0.38, 
-    "Outros": 0.00
+    "SOLICITAÇÃO DE SERVIÇO": 0.60,
+    "SUPORTE": 0.70
 }
 
 st.title("📈 Controle de Produção")
 
-# 1. Recupera dados salvos permanentemente no aparelho
+# Recupera dados salvos no aparelho
 dados_salvos = local_storage.getItem("pontos_tecnico") or []
 
 # Formulário de lançamento
@@ -46,14 +45,12 @@ with st.expander("➕ Registrar Nova Atividade", expanded=True):
             "Pontos": TABELA_PESOS[atividade_sel]
         }
         dados_salvos.append(novo)
-        # Salva no disco rígido do navegador
         local_storage.setItem("pontos_tecnico", dados_salvos)
         st.success("✅ Registro salvo com sucesso!")
         st.rerun()
 
 st.divider()
 
-# Exibição dos resultados acumulados
 if dados_salvos:
     df = pd.DataFrame(dados_salvos)
     
@@ -69,7 +66,7 @@ if dados_salvos:
     col2.metric("Acumulado", f"{total_acumulado:.2f}")
     col3.metric("Dias Ativos", f"{dias_trabalhados}")
 
-    # Botão de Exportação para o WhatsApp/E-mail
+    # Botão de Exportação
     csv = df.drop(columns=['ID']).to_csv(index=False).encode('utf-8')
     st.download_button(
         label="📥 BAIXAR FECHAMENTO COMPLETO",
@@ -80,14 +77,11 @@ if dados_salvos:
     )
     
     st.subheader("📋 Histórico Registrado")
-    st.caption("Os registros mais recentes aparecem primeiro.")
     
-    # Exibição do histórico com os mais recentes no topo
     for i, item in enumerate(reversed(dados_salvos)):
         with st.container():
             c1, c2 = st.columns([5, 1])
             c1.write(f"📅 {item['Data']} | **{item['Atividade']}** | {item['Pontos']} pts")
-            # Botão de excluir item específico
             if c2.button("🗑️", key=f"del_{item['ID']}"):
                 idx_real = len(dados_salvos) - 1 - i
                 dados_salvos.pop(idx_real)
@@ -96,6 +90,11 @@ if dados_salvos:
 
     st.divider()
 
-    # Trava de Segurança para Zerar o Ciclo
+    # Trava de Segurança Corrigida
     st.warning("⚠️ Ação Irreversível: Use apenas após enviar o relatório.")
-    if st.checkbox("Li e quero
+    if st.checkbox("Li e quero apagar todo o histórico acumulado"):
+        if st.button("🔴 ZERAR TUDO E RECOMEÇAR", use_container_width=True):
+            local_storage.deleteAll()
+            st.rerun()
+else:
+    st.info("👋 Olá! Inicie seus lançamentos. Seus dados ficarão salvos com segurança neste aparelho.")
