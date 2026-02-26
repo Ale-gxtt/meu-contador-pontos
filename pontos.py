@@ -9,22 +9,24 @@ st.set_page_config(page_title="Contador de Pontos Seguro", page_icon="🛡️")
 # Inicializa o armazenamento local
 local_storage = LocalStorage()
 
-# Tabela de pesos
+# Tabela oficial de pesos
 TABELA_PESOS = {
     "INSTALAÇÃO": 1.00, "MUDANÇA DE ENDEREÇO": 1.00, "MIGRAÇÃO DE TECNOLOGIA": 1.00,
     "SUPORTE": 0.70, "SOLICITAÇÃO DE SERVIÇO": 0.60, "MIGRAÇÃO DE PLANO": 0.50,
-    "Mesh": 0.40, "Repetidor": 0.40, "Roku": 0.40, "RETIRADA": 0.38, "Outros": 0.00
+    "Mesh": 0.40, "Repetidor": 0.40, "Roku": 0.40, "CAPEX de Retirada": 0.38, 
+    "RETIRADA": 0.38, "Retirada de Repetidor": 0.38, "Retirada MESH": 0.38, 
+    "Retirada Roku": 0.38, "Outros": 0.00
 }
 
-st.title("🛡️ Contador de Pontos (Modo Seguro)")
+st.title("🛡️ Contador de Pontos")
 
-# 1. Tenta recuperar dados já salvos no celular
+# Recupera dados salvos no aparelho
 dados_salvos = local_storage.getItem("pontos_tecnico") or []
 
-# Formulário
+# Formulário de lançamento
 with st.expander("➕ Lançar Atividade", expanded=True):
-    atividade_sel = st.selectbox("Atividade:", list(TABELA_PESOS.keys()))
-    if st.button("Confirmar", use_container_width=True):
+    atividade_sel = st.selectbox("Selecione a Atividade:", list(TABELA_PESOS.keys()))
+    if st.button("Confirmar Lançamento", use_container_width=True):
         novo = {
             "ID": datetime.now().strftime("%H%M%S%f"),
             "Data": datetime.now().strftime("%d/%m/%Y"),
@@ -33,31 +35,49 @@ with st.expander("➕ Lançar Atividade", expanded=True):
             "Pontos": TABELA_PESOS[atividade_sel]
         }
         dados_salvos.append(novo)
-        # SALVA NO DISCO DO CELULAR
         local_storage.setItem("pontos_tecnico", dados_salvos)
-        st.success("Salvo no aparelho!")
+        st.success("Salvo com sucesso!")
         st.rerun()
 
 st.divider()
 
-# Exibição
+# Exibição do histórico e resultados
 if dados_salvos:
     df = pd.DataFrame(dados_salvos)
-    st.metric("Total Acumulado", f"{df['Pontos'].sum():.2f}")
     
+    # Métrica de Total
+    total_dia = df['Pontos'].sum()
+    st.metric("Total Acumulado", f"{total_dia:.2f} pts")
+    
+    # Botão de Download (Voltou para cá!)
+    csv = df.drop(columns=['ID']).to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 BAIXAR RELATÓRIO DO DIA",
+        data=csv,
+        file_name=f"pontos_{datetime.now().strftime('%d_%m')}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+    
+    st.subheader("📜 Detalhes salvos no aparelho")
+    
+    # Lista de atividades com opção de excluir individual
     for i, item in enumerate(dados_salvos):
         col1, col2 = st.columns([4, 1])
         with col1:
-            st.write(f"**{item['Atividade']}** - {item['Pontos']} pts")
+            st.write(f"**{item['Atividade']}** ({item['Hora']}) - {item['Pontos']} pts")
         with col2:
             if st.button("🗑️", key=f"del_{item['ID']}"):
                 dados_salvos.pop(i)
                 local_storage.setItem("pontos_tecnico", dados_salvos)
                 st.rerun()
 
-    # Botão para limpar tudo (Final do dia)
-    if st.button("🔴 LIMPAR TUDO (Novo Dia)", use_container_width=True):
-        local_storage.deleteAll()
-        st.rerun()
+    st.divider()
+
+    # Botão para Limpar com Confirmação
+    if st.checkbox("Habilitar limpeza de dados (Novo Dia)"):
+        if st.button("🔴 APAGAR TUDO E RECOMEÇAR", use_container_width=True):
+            local_storage.deleteAll()
+            st.rerun()
 else:
     st.info("Nenhum dado salvo no aparelho.")
