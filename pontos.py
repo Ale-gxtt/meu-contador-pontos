@@ -4,11 +4,11 @@ from datetime import datetime, timedelta
 from streamlit_local_storage import LocalStorage
 import time
 
-# 1. Configuração da página
-st.set_page_config(page_title="Gestão de Produtividade", page_icon="💰", layout="wide")
+# 1. Configuração e Estilo
+st.set_page_config(page_title="Sistema de Produtividade Técnica", page_icon="💰", layout="wide")
 local_storage = LocalStorage()
 
-# 2. Tabelas Base
+# 2. Tabela de Pesos
 TABELA_PESOS = {
     "INSTALAÇÃO": 1.00, "MUDANÇA DE ENDEREÇO": 1.00, "MIGRAÇÃO DE TECNOLOGIA": 1.00,
     "SUPORTE": 0.70, "SOLICITAÇÃO DE SERVIÇO": 0.60, "MIGRAÇÃO DE PLANO": 0.50,
@@ -30,36 +30,42 @@ def calcular_valor_comissao(porcentagem):
     if porcentagem < 120: return 780.0
     return 900.0
 
-def contar_dias_uteis_mes_atual():
+# PONTO CRUCIAL: Contagem de dias úteis (Segunda a Sábado)
+def contar_dias_uteis_mes_completo():
     hoje = datetime.now()
-    primeiro_dia = hoje.replace(day=1)
+    # Primeiro dia do mês atual
+    temp_dia = hoje.replace(day=1)
+    # Primeiro dia do próximo mês
     if hoje.month == 12:
-        ultimo_dia = hoje.replace(year=hoje.year + 1, month=1, day=1) - timedelta(days=1)
+        proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
     else:
-        ultimo_dia = hoje.replace(month=hoje.month + 1, day=1) - timedelta(days=1)
+        proximo_mes = hoje.replace(month=hoje.month + 1, day=1)
+    
+    ultimo_dia = proximo_mes - timedelta(days=1)
+    
     dias_uteis = 0
-    temp_dia = primeiro_dia
-    while temp_dia <= ultimo_dia:
-        if temp_dia.weekday() != 6: 
+    dia_corrente = temp_dia
+    while dia_corrente <= ultimo_dia:
+        if dia_corrente.weekday() != 6: # 6 é Domingo. Se for diferente de 6, conta.
             dias_uteis += 1
-        temp_dia += timedelta(days=1)
+        dia_corrente += timedelta(days=1)
     return dias_uteis
 
-# --- IDENTIFICAÇÃO ---
+# --- ACESSO ---
 nome_usuario = local_storage.getItem("nome_tecnico")
 if not nome_usuario:
-    st.title("🚀 Sistema de Produtividade")
-    nome_input = st.text_input("Digite seu nome completo:")
-    if st.button("Acessar"):
+    st.title("🚀 Sistema de Gestão Regional")
+    nome_input = st.text_input("Digite seu nome completo para começar:")
+    if st.button("Entrar no Sistema"):
         if nome_input:
             local_storage.setItem("nome_tecnico", nome_input)
             st.rerun()
     st.stop()
 
-# --- INTERFACE ---
-st.title(f"Painel de Produtividade: {nome_usuario.split()[0]}")
+# --- TELA PRINCIPAL ---
+st.title(f"Painel de Produtividade: {nome_usuario}")
 
-# Recuperação e Tratamento
+# Recuperação de dados
 dados_brutos = local_storage.getItem("pontos_tecnico") or []
 dados_validados = []
 for item in dados_brutos:
@@ -68,66 +74,75 @@ for item in dados_brutos:
         "Data": item.get("Data", "00/00/0000"),
         "Hora": item.get("Hora", "00:00:00"),
         "Atividade": item.get("Atividade", "Registro"),
-        "Pontos": item.get("Pontos", item.get("Points", 0.0))
+        "Pontos": item.get("Pontos", 0.0)
     })
 
-with st.expander("➕ REGISTRAR SERVIÇO AGORA", expanded=True):
-    servico = st.selectbox("O que você finalizou?", list(TABELA_PESOS.keys()))
+# Registro
+with st.expander("➕ REGISTRAR ATIVIDADE", expanded=True):
+    servico = st.selectbox("Selecione o serviço:", list(TABELA_PESOS.keys()))
     if st.button("SALVAR REGISTRO", use_container_width=True):
-        novo = {"ID": datetime.now().strftime("%H%M%S%f"), "Data": datetime.now().strftime("%d/%m/%Y"),
-                "Hora": datetime.now().strftime("%H:%M:%S"), "Atividade": servico, "Pontos": TABELA_PESOS[servico]}
-        dados_validados.append(novo)
-        local_storage.setItem("pontos_tecnico", dados_validados)
-        st.success("✅ Registrado!")
+        novo = {
+            "ID": datetime.now().strftime("%H%M%S%f"),
+            "Data": datetime.now().strftime("%d/%m/%Y"),
+            "Hora": datetime.now().strftime("%H:%M:%S"),
+            "Atividade": servico,
+            "Pontos": TABELA_PESOS[servico]
+        }
+        lista = dados_validados + [novo]
+        local_storage.setItem("pontos_tecnico", lista)
+        st.success("✅ Atividade salva com sucesso!")
         time.sleep(0.5)
         st.rerun()
 
+# --- RESULTADOS ---
 if dados_validados:
     df = pd.DataFrame(dados_validados)
     total_pts = pd.to_numeric(df['Pontos']).sum()
-    dias_uteis_mes = contar_dias_uteis_mes_atual()
-    percentual = (total_pts / (dias_uteis_mes * 3.2)) * 100
-    valor_comissao = calcular_valor_comissao(percentual)
+    
+    dias_uteis = contar_dias_uteis_mes_completo()
+    meta_total = dias_uteis * 3.2
+    produtividade = (total_pts / meta_total) * 100
+    comissao = calcular_valor_comissao(produtividade)
 
     st.divider()
     st.subheader("💰 Estimativa de Comissão")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Pontos Acumulados", f"{total_pts:.2f} pts")
-    c2.metric("Produtividade Atual", f"{percentual:.1f}%")
-    c3.metric("Bônus Previsto", f"R$ {valor_comissao:.2f}")
-
-    # --- BOTÃO DE APAGAR HISTÓRICO COM SEGURANÇA ---
-    st.sidebar.divider()
-    st.sidebar.subheader("⚙️ Configurações de Dados")
     
-    if "confirmar_limpeza" not in st.session_state:
-        st.session_state.confirmar_limpeza = False
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Pontos Totais", f"{total_pts:.2f}")
+    c2.metric("Produtividade", f"{produtividade:.1f}%")
+    c3.metric("Bônus Previsto", f"R$ {comissao:.2f}")
 
-    if not st.session_state.confirmar_limpeza:
-        if st.sidebar.button("🗑️ Limpar Histórico Mensal"):
-            st.session_state.confirmar_limpeza = True
+    st.caption(f"ℹ️ Baseado em **{dias_uteis} dias úteis** neste mês (Meta: {meta_total:.2f} pts). Domingos não contabilizados.")
+
+    # --- BARRA LATERAL (CONFIGURAÇÕES) ---
+    st.sidebar.title("⚙️ Opções")
+    if "limpar_clicado" not in st.session_state:
+        st.session_state.limpar_clicado = False
+
+    if not st.session_state.limpar_clicado:
+        if st.sidebar.button("🗑️ Limpar Histórico do Mês"):
+            st.session_state.limpar_clicado = True
             st.rerun()
     else:
-        st.sidebar.warning("⚠️ ATENÇÃO: Ao aceitar, todo o seu histórico de lançamentos será apagado permanentemente.")
-        if st.sidebar.button("✅ CONFIRMAR E APAGAR TUDO"):
+        st.sidebar.warning("⚠️ VOCÊ TEM CERTEZA? Isso apagará todos os seus registros deste mês.")
+        if st.sidebar.button("✅ SIM, APAGAR TUDO"):
             local_storage.setItem("pontos_tecnico", [])
-            st.session_state.confirmar_limpeza = False
-            st.success("Histórico apagado!")
-            time.sleep(1)
+            st.session_state.limpar_clicado = False
             st.rerun()
         if st.sidebar.button("❌ Cancelar"):
-            st.session_state.confirmar_limpeza = False
+            st.session_state.limpar_clicado = False
             st.rerun()
 
-    st.subheader("📋 Histórico")
+    # Histórico
+    st.subheader("📋 Histórico Mensal")
     for i, item in enumerate(reversed(dados_validados)):
         with st.container():
-            col_i, col_b = st.columns([6, 1])
-            col_i.write(f"📅 {item['Data']} - **{item['Atividade']}** ({item['Pontos']} pts)")
-            if col_b.button("🗑️", key=f"del_{item['ID']}"):
-                indice = len(dados_validados) - 1 - i
-                dados_validados.pop(indice)
+            col_txt, col_del = st.columns([6, 1])
+            col_txt.write(f"📅 {item['Data']} | **{item['Atividade']}** ({item['Pontos']} pts)")
+            if col_del.button("🗑️", key=f"del_{item['ID']}"):
+                idx = len(dados_validados) - 1 - i
+                dados_validados.pop(idx)
                 local_storage.setItem("pontos_tecnico", dados_validados)
                 st.rerun()
 else:
-    st.warning("Nenhum serviço registrado.")
+    st.info("Aguardando lançamentos para calcular produtividade.")
