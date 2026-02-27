@@ -141,7 +141,7 @@ if dados_validados:
         st.session_state.confirmar_limpeza = False
 
     if not st.session_state.confirmar_limpeza:
-        if st.sidebar.button("🗑️ Limpar Mês"):
+        if st.sidebar.button("🗑️ Apagar histórico mensal"):
             st.session_state.confirmar_limpeza = True
             st.rerun()
     else:
@@ -174,3 +174,4 @@ else:
         st.session_state.nome_tecnico = ""
         time.sleep(1.0)
         st.rerun()
+
