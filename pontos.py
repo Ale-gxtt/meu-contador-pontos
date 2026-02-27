@@ -8,6 +8,13 @@ import time
 st.set_page_config(page_title="Sistema de Produtividade Técnica", page_icon="📈", layout="wide")
 local_storage = LocalStorage()
 
+# Estilização para as métricas ficarem maiores
+st.markdown("""
+    <style>
+    [data-testid="stMetricValue"] { font-size: 35px; }
+    </style>
+    """, unsafe_allow_html=True)
+
 # 2. Tabela de Pesos
 TABELA_PESOS = {
     "INSTALAÇÃO": 1.00, "MUDANÇA DE ENDEREÇO": 1.00, "MIGRAÇÃO DE TECNOLOGIA": 1.00,
@@ -36,12 +43,13 @@ def contar_dias_uteis_mes_completo():
     if hoje.month == 12:
         proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
     else:
-        proximo_mes = hoy.replace(month=hoje.month + 1, day=1)
+        # CORREÇÃO AQUI: era 'hoy', agora é 'hoje'
+        proximo_mes = hoje.replace(month=hoje.month + 1, day=1)
     ultimo_dia = proximo_mes - timedelta(days=1)
     dias_uteis = 0
     dia_corrente = temp_dia
     while dia_corrente <= ultimo_dia:
-        if dia_corrente.weekday() != 6:
+        if dia_corrente.weekday() != 6: # Domingo (6) não conta
             dias_uteis += 1
         dia_corrente += timedelta(days=1)
     return dias_uteis
@@ -50,7 +58,7 @@ def contar_dias_uteis_mes_completo():
 nome_usuario = local_storage.getItem("nome_tecnico")
 if not nome_usuario:
     st.title("🚀 Sistema de Gestão Regional")
-    nome_input = st.text_input("Digite seu nome completo:")
+    nome_input = st.text_input("Digite seu nome completo para começar:")
     if st.button("Entrar no Sistema"):
         if nome_input:
             local_storage.setItem("nome_tecnico", nome_input)
@@ -60,20 +68,22 @@ if not nome_usuario:
 # --- TELA PRINCIPAL ---
 st.title(f"📈 Dashboard: {nome_usuario}")
 
+# RECUPERAÇÃO SEGURA DOS DADOS (Evita KeyError)
 dados_brutos = local_storage.getItem("pontos_tecnico") or []
 dados_validados = []
 for item in dados_brutos:
-    dados_validados.append({
-        "ID": item.get("ID", str(time.time())),
-        "Data": item.get("Data", "00/00/0000"),
-        "Hora": item.get("Hora", "00:00:00"),
-        "Atividade": item.get("Atividade", "Registro"),
-        "Pontos": float(item.get("Pontos", 0.0))
-    })
+    if isinstance(item, dict):
+        dados_validados.append({
+            "ID": item.get("ID", str(time.time())),
+            "Data": item.get("Data", "00/00/0000"),
+            "Hora": item.get("Hora", "00:00:00"),
+            "Atividade": item.get("Atividade", "Registro"),
+            "Pontos": float(item.get("Pontos", 0.0))
+        })
 
 # Registro
-with st.expander("➕ REGISTRAR ATIVIDADE", expanded=True):
-    servico = st.selectbox("Serviço realizado:", list(TABELA_PESOS.keys()))
+with st.expander("➕ REGISTRAR ATIVIDADE EM CAMPO", expanded=True):
+    servico = st.selectbox("Selecione o serviço finalizado:", list(TABELA_PESOS.keys()))
     if st.button("SALVAR REGISTRO", use_container_width=True):
         novo = {
             "ID": datetime.now().strftime("%H%M%S%f"),
@@ -82,61 +92,87 @@ with st.expander("➕ REGISTRAR ATIVIDADE", expanded=True):
             "Atividade": servico,
             "Pontos": TABELA_PESOS[servico]
         }
-        local_storage.setItem("pontos_tecnico", dados_validados + [novo])
-        st.success("✅ Salvo!")
+        # Adiciona e salva
+        dados_validados.append(novo)
+        local_storage.setItem("pontos_tecnico", dados_validados)
+        st.success(f"🎯 {servico} registrado!")
         time.sleep(0.5)
         st.rerun()
 
-# --- CÁLCULOS DE METAS ---
+# --- RESULTADOS INTERATIVOS ---
 if dados_validados:
     df = pd.DataFrame(dados_validados)
     total_pts_mes = df['Pontos'].sum()
+    
+    # Meta Diária
     hoje_str = datetime.now().strftime("%d/%m/%Y")
     pontos_hoje = df[df['Data'] == hoje_str]['Pontos'].sum()
     
-    dias_uteis_mes = contar_dias_uteis_mes_completo()
-    meta_total_mes = dias_uteis_mes * 3.2
-    produtividade_mes = (total_pts_mes / meta_total_mes) * 100
+    # Meta Mensal
+    dias_uteis = contar_dias_uteis_mes_completo()
+    meta_mensal_total = dias_uteis * 3.2
+    produtividade_mes = (total_pts_mes / meta_mensal_total) * 100
     comissao = calcular_valor_comissao(produtividade_mes)
 
     st.divider()
 
-    # --- FEEDBACK DIÁRIO ---
-    if pontos_hoje < 3.2:
-        falta_hoje = 3.2 - pontos_hoje
-        st.warning(f"🚩 **Meta Diária:** Faltam **{falta_hoje:.2f} pontos** para atingir sua meta de hoje (3.20).")
-    else:
-        st.success(f"✅ **Meta Diária batida!** Você já fez {pontos_hoje:.2f} pontos hoje.")
+    # --- MENSAGENS DE METAS (DIÁRIA E MENSAL) ---
+    col_msg1, col_msg2 = st.columns(2)
+    
+    with col_msg1:
+        if pontos_hoje < 3.2:
+            st.warning(f"🚩 **Hoje:** Faltam **{(3.2 - pontos_hoje):.2f} pts** para a meta diária.")
+        else:
+            st.success(f"✅ **Hoje:** Meta de 3.2 batida! ({pontos_hoje:.2f} pts)")
 
-    # --- FEEDBACK MENSAL ---
-    if total_pts_mes < meta_total_mes:
-        falta_mes = meta_total_mes - total_pts_mes
-        st.info(f"📅 **Meta Mensal:** Faltam **{falta_mes:.2f} pontos** para fechar o mês com média 3.20.")
-    else:
-        st.balloons()
-        st.success(f"🏆 **Incrível!** Você já superou a meta mensal de {meta_total_mes:.2f} pontos!")
+    with col_msg2:
+        if total_pts_mes < meta_mensal_total:
+            st.info(f"📅 **Mês:** Faltam **{(meta_mensal_total - total_pts_mes):.2f} pts** para o objetivo mensal.")
+        else:
+            st.success(f"🏆 **Mês:** Meta mensal atingida!")
 
-    # Painel de Métricas
+    # Painel Visual
     c1, c2, c3 = st.columns(3)
     c1.metric("Pontos Hoje", f"{pontos_hoje:.2f}", delta=f"{pontos_hoje - 3.2:.2f}")
     c2.metric("Produtividade Mês", f"{produtividade_mes:.1f}%")
     c3.metric("Estimativa Comissão", f"R$ {comissao:.2f}")
 
-    # Gráfico
-    st.subheader("📊 Evolução Diária")
+    # Gráfico de Evolução
+    st.subheader("📊 Evolução da Pontuação")
     df_grafico = df.groupby('Data')['Pontos'].sum().reset_index()
     st.line_chart(df_grafico.set_index('Data'))
 
-    # Barra Lateral
-    if st.sidebar.button("🗑️ Limpar Histórico"):
-        st.session_state.confirmar = True
-    if st.session_state.get("confirmar"):
-        if st.sidebar.button("CONFIRMAR LIMPEZA"):
+    st.divider()
+
+    # --- BARRA LATERAL (CONFIGURAÇÕES) ---
+    st.sidebar.title("⚙️ Painel de Controle")
+    if "confirmar_limpeza" not in st.session_state:
+        st.session_state.confirmar_limpeza = False
+
+    if not st.session_state.confirmar_limpeza:
+        if st.sidebar.button("🗑️ Limpar Histórico do Mês"):
+            st.session_state.confirmar_limpeza = True
+            st.rerun()
+    else:
+        st.sidebar.error("⚠️ Apagar tudo?")
+        if st.sidebar.button("✅ SIM"):
             local_storage.setItem("pontos_tecnico", [])
-            st.session_state.confirmar = False
+            st.session_state.confirmar_limpeza = False
             st.rerun()
-        if st.sidebar.button("Cancelar"):
-            st.session_state.confirmar = False
+        if st.sidebar.button("❌ NÃO"):
+            st.session_state.confirmar_limpeza = False
             st.rerun()
+
+    # Histórico detalhado com opção de apagar um por um
+    st.subheader("📋 Detalhamento dos Serviços")
+    for i, item in enumerate(reversed(dados_validados)):
+        with st.container():
+            col_info, col_del = st.columns([6, 1])
+            col_info.write(f"📅 {item['Data']} às {item['Hora']} - **{item['Atividade']}** ({item['Pontos']} pts)")
+            if col_del.button("🗑️", key=f"del_{item['ID']}"):
+                idx_original = len(dados_validados) - 1 - i
+                dados_validados.pop(idx_original)
+                local_storage.setItem("pontos_tecnico", dados_validados)
+                st.rerun()
 else:
-    st.info("Inicie seus lançamentos para ver o cálculo das metas.")
+    st.info("👋 Inicie seus lançamentos para ativar o acompanhamento de metas e o gráfico.")
