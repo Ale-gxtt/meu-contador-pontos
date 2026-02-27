@@ -56,7 +56,7 @@ if st.session_state.nome_tecnico is None:
 
 # Se mesmo assim não tiver nome, mostra a tela de login
 if not st.session_state.nome_tecnico:
-    st.title("🚀 Sistema de Gestão Regional")
+    st.title("🚀 Controle de Pontos & Comissão")
     nome_input = st.text_input("Digite seu nome completo:")
     if st.button("Configurar e Entrar"):
         if nome_input:
@@ -169,3 +169,4 @@ else:
         local_storage.setItem("nome_tecnico", "")
         st.session_state.nome_tecnico = None
         st.rerun()
+
