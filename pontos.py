@@ -41,7 +41,7 @@ def contar_dias_uteis_mes_completo():
     dias_uteis = 0
     dia_corrente = temp_dia
     while dia_corrente <= ultimo_dia:
-        if dia_corrente.weekday() != 6: # Domingo (6) não conta
+        if dia_corrente.weekday() != 6:
             dias_uteis += 1
         dia_corrente += timedelta(days=1)
     return dias_uteis
@@ -84,7 +84,7 @@ with st.expander("➕ LANÇAR SERVIÇO", expanded=True):
         dados_validados.append(novo)
         local_storage.setItem("pontos_tecnico", dados_validados)
         st.success("🎯 Salvo com sucesso!")
-        time.sleep(0.6) # Delay para garantir a gravação no browser
+        time.sleep(0.6)
         st.rerun()
 
 if dados_validados:
@@ -122,7 +122,7 @@ if dados_validados:
 
     st.divider()
 
-    # --- BARRA LATERAL (LIMPEZA COM TRAVA DE SEGURANÇA ATUALIZADA) ---
+    # --- BARRA LATERAL (LIMPEZA TOTAL) ---
     st.sidebar.title("⚙️ Configurações")
     if "confirmar_limpeza" not in st.session_state:
         st.session_state.confirmar_limpeza = False
@@ -134,31 +134,28 @@ if dados_validados:
     else:
         st.sidebar.error("⚠️ Apagar todos os registros?")
         if st.sidebar.button("✅ SIM, APAGAR TUDO"):
-            local_storage.setItem("pontos_tecnico", []) # Limpa browser
-            st.sidebar.write("Limpando banco de dados...")
-            time.sleep(1.0) # Espera crucial para o browser processar
+            local_storage.setItem("pontos_tecnico", [])
+            time.sleep(1.0) # Espera crucial para celular
             st.session_state.confirmar_limpeza = False
             st.rerun()
         if st.sidebar.button("❌ CANCELAR"):
             st.session_state.confirmar_limpeza = False
             st.rerun()
 
-    # Histórico com exclusão individual
+    # Histórico detalhado (CORRIGIDO PARA CELULAR)
     st.subheader("📋 Lançamentos do Mês")
     for i, item in enumerate(reversed(dados_validados)):
         with st.container():
             col_txt, col_del = st.columns([6, 1])
             col_txt.write(f"📅 {item['Data']} | **{item['Atividade']}** ({item['Pontos']} pts)")
+            # Botão de excluir um por um
             if col_del.button("🗑️", key=f"del_{item['ID']}"):
                 idx = len(dados_validados) - 1 - i
                 dados_validados.pop(idx)
+                # SALVA E ESPERA (O segredo está aqui)
                 local_storage.setItem("pontos_tecnico", dados_validados)
-                time.sleep(0.4)
+                st.toast("Excluindo registro...") # Feedback visual rápido
+                time.sleep(0.8) # Dá tempo ao celular de gravar a exclusão
                 st.rerun()
 else:
-    st.info("Aguardando lançamentos para calcular produtividade.")
-    
-    # Botão de Reset também na tela inicial caso precise
-    if st.sidebar.button("Refazer Login"):
-        local_storage.setItem("nome_tecnico", "")
-        st.rerun()
+    st.info("Aguardando lançamentos.")
