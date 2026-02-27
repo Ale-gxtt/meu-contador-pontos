@@ -8,7 +8,7 @@ import time
 st.set_page_config(page_title="Produtividade Técnica", page_icon="📈", layout="wide")
 local_storage = LocalStorage()
 
-# 2. Tabela de Pesos
+# 2. Tabela de Pesos (Conforme sua regra)
 TABELA_PESOS = {
     "INSTALAÇÃO": 1.00, "MUDANÇA DE ENDEREÇO": 1.00, "MIGRAÇÃO DE TECNOLOGIA": 1.00,
     "SUPORTE": 0.70, "SOLICITAÇÃO DE SERVIÇO": 0.60, "MIGRAÇÃO DE PLANO": 0.50,
@@ -41,21 +41,29 @@ def contar_dias_uteis_mes_completo():
     dias_uteis = 0
     dia_corrente = temp_dia
     while dia_corrente <= ultimo_dia:
-        if dia_corrente.weekday() != 6:
+        if dia_corrente.weekday() != 6: # Domingo não conta
             dias_uteis += 1
         dia_corrente += timedelta(days=1)
     return dias_uteis
 
-# --- ACESSO ---
-nome_usuario = local_storage.getItem("nome_tecnico")
-if not nome_usuario:
-    st.title("🚀 Sistema de Gestão")
-    nome_input = st.text_input("Seu nome completo:")
-    if st.button("Entrar"):
+# --- ACESSO PERSISTENTE ---
+if "nome_tecnico" not in st.session_state:
+    st.session_state.nome_tecnico = local_storage.getItem("nome_tecnico")
+
+if not st.session_state.nome_tecnico:
+    st.title("🚀 Sistema de Gestão Regional")
+    st.subheader("Identifique-se para começar")
+    nome_input = st.text_input("Digite seu nome completo:")
+    if st.button("Configurar e Entrar"):
         if nome_input:
             local_storage.setItem("nome_tecnico", nome_input)
+            st.session_state.nome_tecnico = nome_input
+            st.success("Perfil configurado!")
+            time.sleep(1)
             st.rerun()
     st.stop()
+
+nome_usuario = st.session_state.nome_tecnico
 
 # --- TELA PRINCIPAL ---
 st.title(f"📊 Painel: {nome_usuario}")
@@ -122,8 +130,18 @@ if dados_validados:
 
     st.divider()
 
-    # --- BARRA LATERAL (LIMPEZA TOTAL) ---
+    # --- BARRA LATERAL (CONFIGURAÇÕES) ---
     st.sidebar.title("⚙️ Configurações")
+    
+    # Botão para trocar de usuário
+    if st.sidebar.button("👤 Trocar Usuário / Sair"):
+        local_storage.setItem("nome_tecnico", "")
+        st.session_state.nome_tecnico = None
+        st.rerun()
+
+    st.sidebar.divider()
+
+    # Segurança para limpar histórico
     if "confirmar_limpeza" not in st.session_state:
         st.session_state.confirmar_limpeza = False
 
@@ -135,27 +153,29 @@ if dados_validados:
         st.sidebar.error("⚠️ Apagar todos os registros?")
         if st.sidebar.button("✅ SIM, APAGAR TUDO"):
             local_storage.setItem("pontos_tecnico", [])
-            time.sleep(1.0) # Espera crucial para celular
+            time.sleep(1.0)
             st.session_state.confirmar_limpeza = False
             st.rerun()
         if st.sidebar.button("❌ CANCELAR"):
             st.session_state.confirmar_limpeza = False
             st.rerun()
 
-    # Histórico detalhado (CORRIGIDO PARA CELULAR)
+    # Histórico detalhado
     st.subheader("📋 Lançamentos do Mês")
     for i, item in enumerate(reversed(dados_validados)):
         with st.container():
             col_txt, col_del = st.columns([6, 1])
-            col_txt.write(f"📅 {item['Data']} | **{item['Atividade']}** ({item['Pontos']} pts)")
-            # Botão de excluir um por um
+            col_txt.write(f"📅 {item['Data']} | **{item['Atividade']}** ({item['Points']} pts)")
             if col_del.button("🗑️", key=f"del_{item['ID']}"):
                 idx = len(dados_validados) - 1 - i
                 dados_validados.pop(idx)
-                # SALVA E ESPERA (O segredo está aqui)
                 local_storage.setItem("pontos_tecnico", dados_validados)
-                st.toast("Excluindo registro...") # Feedback visual rápido
-                time.sleep(0.8) # Dá tempo ao celular de gravar a exclusão
+                st.toast("Excluindo...")
+                time.sleep(0.8)
                 st.rerun()
 else:
     st.info("Aguardando lançamentos.")
+    if st.sidebar.button("👤 Trocar Usuário"):
+        local_storage.setItem("nome_tecnico", "")
+        st.session_state.nome_tecnico = None
+        st.rerun()
