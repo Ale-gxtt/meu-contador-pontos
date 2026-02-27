@@ -5,159 +5,111 @@ from streamlit_local_storage import LocalStorage
 import time
 
 # 1. Configuração da página
-st.set_page_config(page_title="Produção - Técnico", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Gestão de Produtividade", page_icon="💰", layout="wide")
 local_storage = LocalStorage()
 
-# 2. Tabela de Pesos (Ordenada do maior para o menor)
+# 2. Tabela de Pesos e Comissão
 TABELA_PESOS = {
-    "INSTALAÇÃO": 1.00,
-    "MUDANÇA DE ENDEREÇO": 1.00,
-    "MIGRAÇÃO DE TECNOLOGIA": 1.00,
-    "SUPORTE": 0.70,
-    "SOLICITAÇÃO DE SERVIÇO": 0.60,
-    "MIGRAÇÃO DE PLANO": 0.50,
-    "Mesh": 0.40,
-    "Repetidor": 0.40,
-    "Roku": 0.40,
-    "CAPEX de Retirada": 0.38, 
-    "RETIRADA": 0.38, 
-    "Retirada de Repetidor": 0.38, 
-    "Retirada MESH": 0.38, 
-    "Retirada Roku": 0.38, 
-    "Outros": 0.00
+    "INSTALAÇÃO": 1.00, "MUDANÇA DE ENDEREÇO": 1.00, "MIGRAÇÃO DE TECNOLOGIA": 1.00,
+    "SUPORTE": 0.70, "SOLICITAÇÃO DE SERVIÇO": 0.60, "MIGRAÇÃO DE PLANO": 0.50,
+    "Mesh": 0.40, "Repetidor": 0.40, "Roku": 0.40,
+    "CAPEX de Retirada": 0.38, "RETIRADA": 0.38, "Retirada de Repetidor": 0.38,
+    "Retirada MESH": 0.38, "Retirada Roku": 0.38, "Outros": 0.00
 }
 
-atividades_ordenadas = dict(sorted(TABELA_PESOS.items(), key=lambda item: item[1], reverse=True))
+def calcular_comissao_60(porcentagem):
+    if porcentagem < 75: return 0.0
+    if porcentagem < 80: return 180.0
+    if porcentagem < 85: return 210.0
+    if porcentagem < 90: return 240.0
+    if porcentagem < 95: return 270.0
+    if porcentagem < 100: return 300.0
+    if porcentagem < 105: return 420.0
+    if porcentagem < 110: return 540.0
+    if porcentagem < 115: return 660.0
+    if porcentagem < 120: return 780.0
+    return 900.0
 
-def contar_dias_sem_domingo(inicio, fim):
-    dias = 0
-    atual = inicio
-    while atual <= fim:
-        if atual.weekday() != 6: # 6 = Domingo
-            dias += 1
-        atual += timedelta(days=1)
-    return dias
+def contar_dias_uteis_mes_atual():
+    hoje = datetime.now()
+    primeiro_dia = hoje.replace(day=1)
+    if hoje.month == 12:
+        ultimo_dia = hoje.replace(year=hoje.year + 1, month=1, day=1) - timedelta(days=1)
+    else:
+        ultimo_dia = hoje.replace(month=hoje.month + 1, day=1) - timedelta(days=1)
+    
+    dias_uteis = 0
+    temp_dia = primeiro_dia
+    while temp_dia <= ultimo_dia:
+        if temp_dia.weekday() != 6: # Exclui Domingo
+            dias_uteis += 1
+        temp_dia += timedelta(days=1)
+    return dias_uteis
 
-# --- SISTEMA DE IDENTIFICAÇÃO ---
+# --- IDENTIFICAÇÃO ---
 nome_usuario = local_storage.getItem("nome_tecnico")
-
 if not nome_usuario:
-    st.title("🚀 Bem-vindo!")
-    st.subheader("Para começar, precisamos te identificar.")
-    nome_input = st.text_input("Digite seu nome completo:")
-    if st.button("Acessar Sistema"):
+    st.title("🚀 Sistema de Produtividade")
+    nome_input = st.text_input("Digite seu nome completo para iniciar:")
+    if st.button("Acessar"):
         if nome_input:
             local_storage.setItem("nome_tecnico", nome_input)
             st.rerun()
-        else:
-            st.error("Por favor, digite seu nome.")
     st.stop()
 
-# --- BARRA LATERAL ---
-st.sidebar.title("👤 Perfil")
-st.sidebar.write(f"**Técnico:** {nome_usuario}")
-if st.sidebar.button("Alterar Nome / Sair"):
-    local_storage.setItem("nome_tecnico", None)
-    st.rerun()
-
-# --- CONTEÚDO PRINCIPAL ---
-st.title(f"Olá, {nome_usuario.split()[0]}! 📈")
+# --- CONTEÚDO ---
+st.title(f"Painel de Produtividade: {nome_usuario.split()[0]}")
+st.error("🚨 **REGRA DE OURO:** Lançou na porta, garantiu a pontuação. Não deixe para depois!")
 
 dados_brutos = local_storage.getItem("pontos_tecnico") or []
-dados_salvos = []
 
-for item in dados_brutos:
-    ponto_valor = item.get("Pontos") if item.get("Pontos") is not None else item.get("Points", 0)
-    item["Pontos_Padrao"] = ponto_valor
-    dados_salvos.append(item)
-
-with st.expander("➕ Registrar Nova Atividade", expanded=True):
-    atividade_sel = st.selectbox("Selecione o serviço realizado:", list(atividades_ordenadas.keys()))
-    
-    if st.button("Salvar Registro", use_container_width=True):
+with st.expander("➕ REGISTRAR SERVIÇO AGORA", expanded=True):
+    servico = st.selectbox("O que você finalizou?", list(TABELA_PESOS.keys()))
+    if st.button("SALVAR REGISTRO", use_container_width=True):
         novo = {
             "ID": datetime.now().strftime("%H%M%S%f"),
             "Data": datetime.now().strftime("%d/%m/%Y"),
             "Hora": datetime.now().strftime("%H:%M:%S"),
-            "Atividade": atividade_sel,
-            "Pontos": TABELA_PESOS[atividade_sel]
+            "Atividade": servico,
+            "Pontos": TABELA_PESOS[servico]
         }
-        
-        lista_atualizada = dados_brutos.copy()
-        lista_atualizada.append(novo)
-        local_storage.setItem("pontos_tecnico", lista_atualizada)
-        
-        st.success("🎯 Salvo com sucesso!")
-        st.toast("Pode fechar a aba se desejar!", icon='🔒')
-        time.sleep(1.2)
+        lista = dados_brutos + [novo]
+        local_storage.setItem("pontos_tecnico", lista)
+        st.success("✅ Registrado!")
+        time.sleep(0.5)
         st.rerun()
 
-st.divider()
-
-if dados_salvos:
-    df = pd.DataFrame(dados_salvos)
-    df['Points_Num'] = pd.to_numeric(df['Pontos_Padrao'])
-    df['Data_dt'] = pd.to_datetime(df['Data'], format='%d/%m/%Y')
+if dados_brutos:
+    df = pd.DataFrame(dados_brutos)
+    total_pts = df['Pontos'].sum()
     
-    total_acumulado = df['Points_Num'].sum()
-    data_inicio = df['Data_dt'].min()
-    dias_uteis = contar_dias_sem_domingo(data_inicio, datetime.now())
-    media_diaria = total_acumulado / (dias_uteis if dias_uteis > 0 else 1)
-    
-    # Cálculo do Desvio da Meta (3.2)
-    meta = 3.2
-    desvio = media_diaria - meta
-
-    # --- INDICADOR VISUAL COM SETA ---
-    st.subheader("🎯 Desempenho em Relação à Meta (3.2)")
-    
-    # Criando o visual da seta e cores
-    if media_diaria >= meta:
-        st.write(f"### 🔼 Média Atual: :green[{media_diaria:.2f}]")
-        st.write(f"💪 **Você está {desvio:.2f} pontos ACIMA da meta!**")
-        st.progress(min(media_diaria / 5.0, 1.0)) # Barra de progresso verde
-    else:
-        st.write(f"### 🔽 Média Atual: :red[{media_diaria:.2f}]")
-        st.write(f"⚠️ **Você está {abs(desvio):.2f} pontos ABAIXO da meta.**")
-        st.progress(min(media_diaria / meta, 1.0)) # Barra de progresso que enche até a meta
+    # Cálculo Financeiro
+    dias_uteis_mes = contar_dias_uteis_mes_atual()
+    meta_mes_pts = dias_uteis_mes * 3.2
+    percentual_atingido = (total_pts / meta_mes_pts) * 100
+    valor_comissao = calcular_comissao_60(percentual_atingido)
 
     st.divider()
-
+    
+    # --- ÁREA FINANCEIRA ---
+    st.subheader("💰 Estimativa de Comissão (60% Produt)")
     c1, c2, c3 = st.columns(3)
-    c1.metric("Acumulado Total", f"{total_acumulado:.2f}")
-    # O componente Metric já cria a setinha automática (Delta)
-    c2.metric("Média Real", f"{media_diaria:.2f}", delta=f"{desvio:.2f}", delta_color="normal")
-    c3.metric("Dias Úteis", f"{dias_uteis}")
+    
+    c1.metric("Pontos Acumulados", f"{total_pts:.2f} pts")
+    c2.metric("Produtividade Atual", f"{percentual_atingido:.1f}%")
+    
+    if valor_comissao > 0:
+        c3.metric("Bônus Previsto", f"R$ {valor_comissao:.2f}", delta="Faixa Atingida", delta_color="normal")
+    else:
+        c3.metric("Bônus Previsto", "R$ 0,00", delta="Abaixo de 75%", delta_color="inverse")
 
-    st.divider()
-    
-    df_export = df[['Data', 'Hora', 'Atividade', 'Pontos_Padrao']].copy()
-    df_export.columns = ['Data', 'Hora', 'Atividade', 'Pontos']
-    df_export['Tecnico'] = nome_usuario
-    csv = df_export.to_csv(index=False).encode('utf-8')
-    
-    st.download_button(
-        label="📥 BAIXAR RELATÓRIO",
-        data=csv,
-        file_name=f"producao_{nome_usuario.replace(' ', '_')}.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
-    
-    st.subheader("📋 Histórico")
-    for i, item in enumerate(reversed(dados_salvos)):
-        with st.container():
-            col_t, col_d = st.columns([5, 1])
-            col_t.write(f"📅 {item['Data']} | **{item['Atividade']}** | {item['Pontos_Padrao']} pts")
-            if col_d.button("🗑️", key=f"del_{item['ID']}"):
-                dados_brutos.pop(len(dados_brutos) - 1 - i)
-                local_storage.setItem("pontos_tecnico", dados_brutos)
-                st.rerun()
+    st.info(f"💡 Meta do mês: **{meta_mes_pts:.2f} pontos** ({dias_uteis_mes} dias úteis).")
 
-    st.divider()
-    if st.checkbox("Habilitar limpeza (Zerar Ciclo)"):
-        if st.button("🔴 APAGAR TUDO"):
-            local_storage.deleteItem("pontos_tecnico")
-            st.rerun()
+    # Botão de Relatório para a Regional
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 BAIXAR CONTRAPROVA PARA REGIONAL", csv, f"producao_{nome_usuario}.csv", "text/csv", use_container_width=True)
+
+    st.subheader("📋 Últimos Lançamentos")
+    st.dataframe(df[['Data', 'Hora', 'Atividade', 'Pontos']].iloc[::-1], hide_index=True, use_container_width=True)
 else:
-    st.info("Aguardando lançamentos...")
+    st.warning("Nenhum dado lançado este mês.")
