@@ -8,7 +8,7 @@ import time
 st.set_page_config(page_title="Produção - Técnico", page_icon="📈", layout="wide")
 local_storage = LocalStorage()
 
-# 2. Tabela de Pesos (Organizada do maior para o menor)
+# 2. Tabela de Pesos (Ordenada do maior para o menor)
 TABELA_PESOS = {
     "INSTALAÇÃO": 1.00,
     "MUDANÇA DE ENDEREÇO": 1.00,
@@ -27,7 +27,6 @@ TABELA_PESOS = {
     "Outros": 0.00
 }
 
-# Organiza a lista de atividades por valor de ponto (decrescente) para o selectbox
 atividades_ordenadas = dict(sorted(TABELA_PESOS.items(), key=lambda item: item[1], reverse=True))
 
 def contar_dias_sem_domingo(inicio, fim):
@@ -73,7 +72,6 @@ for item in dados_brutos:
     dados_salvos.append(item)
 
 with st.expander("➕ Registrar Nova Atividade", expanded=True):
-    # Aqui a lista já aparece do maior ponto para o menor
     atividade_sel = st.selectbox("Selecione o serviço realizado:", list(atividades_ordenadas.keys()))
     
     if st.button("Salvar Registro", use_container_width=True):
@@ -105,18 +103,30 @@ if dados_salvos:
     data_inicio = df['Data_dt'].min()
     dias_uteis = contar_dias_sem_domingo(data_inicio, datetime.now())
     media_diaria = total_acumulado / (dias_uteis if dias_uteis > 0 else 1)
+    
+    # Cálculo do Desvio da Meta (3.2)
+    meta = 3.2
+    desvio = media_diaria - meta
 
-    st.subheader("🎯 Status de Performance")
-    if media_diaria >= 3.2:
-        st.success(f"✅ **MÉDIA EXCELENTE: {media_diaria:.2f}**")
-    elif media_diaria >= 2.8:
-        st.warning(f"⚡ **QUASE LÁ: {media_diaria:.2f}**")
+    # --- INDICADOR VISUAL COM SETA ---
+    st.subheader("🎯 Desempenho em Relação à Meta (3.2)")
+    
+    # Criando o visual da seta e cores
+    if media_diaria >= meta:
+        st.write(f"### 🔼 Média Atual: :green[{media_diaria:.2f}]")
+        st.write(f"💪 **Você está {desvio:.2f} pontos ACIMA da meta!**")
+        st.progress(min(media_diaria / 5.0, 1.0)) # Barra de progresso verde
     else:
-        st.error(f"🚨 **ALERTA: {media_diaria:.2f}**")
+        st.write(f"### 🔽 Média Atual: :red[{media_diaria:.2f}]")
+        st.write(f"⚠️ **Você está {abs(desvio):.2f} pontos ABAIXO da meta.**")
+        st.progress(min(media_diaria / meta, 1.0)) # Barra de progresso que enche até a meta
+
+    st.divider()
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Acumulado", f"{total_acumulado:.2f}")
-    c2.metric("Média/Dia", f"{media_diaria:.2f}", delta=round(media_diaria - 3.2, 2))
+    c1.metric("Acumulado Total", f"{total_acumulado:.2f}")
+    # O componente Metric já cria a setinha automática (Delta)
+    c2.metric("Média Real", f"{media_diaria:.2f}", delta=f"{desvio:.2f}", delta_color="normal")
     c3.metric("Dias Úteis", f"{dias_uteis}")
 
     st.divider()
