@@ -8,7 +8,7 @@ import time
 st.set_page_config(page_title="Gestão de Produtividade", page_icon="💰", layout="wide")
 local_storage = LocalStorage()
 
-# 2. Tabela de Pesos e Comissão
+# 2. Tabela de Pesos e Comissão (Fase 2)
 TABELA_PESOS = {
     "INSTALAÇÃO": 1.00, "MUDANÇA DE ENDEREÇO": 1.00, "MIGRAÇÃO DE TECNOLOGIA": 1.00,
     "SUPORTE": 0.70, "SOLICITAÇÃO DE SERVIÇO": 0.60, "MIGRAÇÃO DE PLANO": 0.50,
@@ -17,7 +17,7 @@ TABELA_PESOS = {
     "Retirada MESH": 0.38, "Retirada Roku": 0.38, "Outros": 0.00
 }
 
-def calcular_comissao_60(porcentagem):
+def calcular_valor_comissao(porcentagem):
     if porcentagem < 75: return 0.0
     if porcentagem < 80: return 180.0
     if porcentagem < 85: return 210.0
@@ -46,7 +46,7 @@ def contar_dias_uteis_mes_atual():
         temp_dia += timedelta(days=1)
     return dias_uteis
 
-# --- IDENTIFICAÇÃO ---
+# --- IDENTIFICAÇÃO DO USUÁRIO ---
 nome_usuario = local_storage.getItem("nome_tecnico")
 if not nome_usuario:
     st.title("🚀 Sistema de Produtividade")
@@ -57,12 +57,13 @@ if not nome_usuario:
             st.rerun()
     st.stop()
 
-# --- CONTEÚDO ---
+# --- INTERFACE PRINCIPAL ---
 st.title(f"Painel de Produtividade: {nome_usuario.split()[0]}")
 st.error("🚨 **REGRA DE OURO:** Lançou na porta, garantiu a pontuação. Não deixe para depois!")
 
 dados_brutos = local_storage.getItem("pontos_tecnico") or []
 
+# --- LANÇAMENTO DE ATIVIDADES ---
 with st.expander("➕ REGISTRAR SERVIÇO AGORA", expanded=True):
     servico = st.selectbox("O que você finalizou?", list(TABELA_PESOS.keys()))
     if st.button("SALVAR REGISTRO", use_container_width=True):
@@ -73,43 +74,53 @@ with st.expander("➕ REGISTRAR SERVIÇO AGORA", expanded=True):
             "Atividade": servico,
             "Pontos": TABELA_PESOS[servico]
         }
-        lista = dados_brutos + [novo]
-        local_storage.setItem("pontos_tecnico", lista)
-        st.success("✅ Registrado!")
+        lista_atualizada = dados_brutos + [novo]
+        local_storage.setItem("pontos_tecnico", lista_atualizada)
+        st.success("✅ Registrado com sucesso!")
         time.sleep(0.5)
         st.rerun()
 
+# --- CÁLCULOS E EXIBIÇÃO ---
 if dados_brutos:
     df = pd.DataFrame(dados_brutos)
     total_pts = df['Pontos'].sum()
     
-    # Cálculo Financeiro
     dias_uteis_mes = contar_dias_uteis_mes_atual()
     meta_mes_pts = dias_uteis_mes * 3.2
     percentual_atingido = (total_pts / meta_mes_pts) * 100
-    valor_comissao = calcular_comissao_60(percentual_atingido)
+    valor_comissao = calcular_valor_comissao(percentual_atingido)
 
     st.divider()
     
-    # --- ÁREA FINANCEIRA ---
-    st.subheader("💰 Estimativa de Comissão (60% Produt)")
+    # Área de Comissão Atualizada
+    st.subheader("💰 Estimativa de Comissão")
     c1, c2, c3 = st.columns(3)
     
     c1.metric("Pontos Acumulados", f"{total_pts:.2f} pts")
     c2.metric("Produtividade Atual", f"{percentual_atingido:.1f}%")
     
-    if valor_comissao > 0:
+    if percentual_atingido >= 75:
         c3.metric("Bônus Previsto", f"R$ {valor_comissao:.2f}", delta="Faixa Atingida", delta_color="normal")
     else:
         c3.metric("Bônus Previsto", "R$ 0,00", delta="Abaixo de 75%", delta_color="inverse")
 
-    st.info(f"💡 Meta do mês: **{meta_mes_pts:.2f} pontos** ({dias_uteis_mes} dias úteis).")
+    st.info(f"💡 Meta do mês: **{meta_mes_pts:.2f} pontos** baseada em {dias_uteis_mes} dias úteis.")
 
-    # Botão de Relatório para a Regional
+    # Botão de Exportação
     csv = df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 BAIXAR CONTRAPROVA PARA REGIONAL", csv, f"producao_{nome_usuario}.csv", "text/csv", use_container_width=True)
 
-    st.subheader("📋 Últimos Lançamentos")
-    st.dataframe(df[['Data', 'Hora', 'Atividade', 'Pontos']].iloc[::-1], hide_index=True, use_container_width=True)
+    # --- HISTÓRICO COM BOTÃO DE APAGAR ---
+    st.subheader("📋 Histórico de Lançamentos")
+    for i, item in enumerate(reversed(dados_brutos)):
+        with st.container():
+            col_info, col_btn = st.columns([6, 1])
+            col_info.write(f"📅 {item['Data']} às {item['Hora']} - **{item['Atividade']}** ({item['Pontos']} pts)")
+            # O botão de apagar voltou aqui:
+            if col_btn.button("🗑️", key=f"del_{item['ID']}"):
+                indice_original = len(dados_brutos) - 1 - i
+                dados_brutos.pop(indice_original)
+                local_storage.setItem("pontos_tecnico", dados_brutos)
+                st.rerun()
 else:
-    st.warning("Nenhum dado lançado este mês.")
+    st.warning("Nenhum serviço registrado neste mês. Comece a lançar para ver sua estimativa de comissão!")
