@@ -41,7 +41,7 @@ def contar_dias_uteis_mes_completo():
     dias_uteis = 0
     dia_corrente = temp_dia
     while dia_corrente <= ultimo_dia:
-        if dia_corrente.weekday() != 6: # Domingo não conta
+        if dia_corrente.weekday() != 6: # Domingo (6) não conta
             dias_uteis += 1
         dia_corrente += timedelta(days=1)
     return dias_uteis
@@ -74,7 +74,7 @@ for item in dados_brutos:
 # Registro Simples
 with st.expander("➕ LANÇAR SERVIÇO", expanded=True):
     servico = st.selectbox("O que você finalizou?", list(TABELA_PESOS.keys()))
-    if st.button("SALVAR", use_container_width=True):
+    if st.button("SALVAR REGISTRO", use_container_width=True):
         novo = {
             "ID": datetime.now().strftime("%H%M%S%f"),
             "Data": datetime.now().strftime("%d/%m/%Y"),
@@ -83,8 +83,8 @@ with st.expander("➕ LANÇAR SERVIÇO", expanded=True):
         }
         dados_validados.append(novo)
         local_storage.setItem("pontos_tecnico", dados_validados)
-        st.success("🎯 Salvo!")
-        time.sleep(0.4)
+        st.success("🎯 Salvo com sucesso!")
+        time.sleep(0.6) # Delay para garantir a gravação no browser
         st.rerun()
 
 if dados_validados:
@@ -100,9 +100,9 @@ if dados_validados:
 
     st.divider()
 
-    # --- MÉTRICAS SIMPLES ---
+    # --- MÉTRICAS ---
     c1, c2, c3 = st.columns(3)
-    c1.metric("Hoje", f"{pts_hoje:.2f} pts", delta=f"{pts_hoje - 3.2:.2f}")
+    c1.metric("Hoje", f"{pts_hoje:.2f} pts", delta=f"{pts_hoje - 3.2:.2f} vs Meta")
     c2.metric("Mês", f"{produtividade:.1f}%")
     c3.metric("Comissão", f"R$ {comissao:.2f}")
 
@@ -114,12 +114,15 @@ if dados_validados:
     # Mensagens de Apoio
     if pts_hoje < 3.2:
         st.warning(f"🚩 Faltam **{(3.2 - pts_hoje):.2f} pontos** para a meta de hoje.")
+    else:
+        st.success("✅ Meta diária batida!")
+
     if produtividade < 100:
         st.info(f"📅 Faltam **{(meta_mensal - total_pts_mes):.2f} pontos** para atingir 100% no mês.")
 
     st.divider()
 
-    # --- SEGURANÇA NA BARRA LATERAL ---
+    # --- BARRA LATERAL (LIMPEZA COM TRAVA DE SEGURANÇA ATUALIZADA) ---
     st.sidebar.title("⚙️ Configurações")
     if "confirmar_limpeza" not in st.session_state:
         st.session_state.confirmar_limpeza = False
@@ -129,16 +132,18 @@ if dados_validados:
             st.session_state.confirmar_limpeza = True
             st.rerun()
     else:
-        st.sidebar.error("⚠️ ATENÇÃO: Apagar todo o histórico?")
-        if st.sidebar.button("✅ SIM, APAGAR"):
-            local_storage.setItem("pontos_tecnico", [])
+        st.sidebar.error("⚠️ Apagar todos os registros?")
+        if st.sidebar.button("✅ SIM, APAGAR TUDO"):
+            local_storage.setItem("pontos_tecnico", []) # Limpa browser
+            st.sidebar.write("Limpando banco de dados...")
+            time.sleep(1.0) # Espera crucial para o browser processar
             st.session_state.confirmar_limpeza = False
             st.rerun()
         if st.sidebar.button("❌ CANCELAR"):
             st.session_state.confirmar_limpeza = False
             st.rerun()
 
-    # Histórico para conferência
+    # Histórico com exclusão individual
     st.subheader("📋 Lançamentos do Mês")
     for i, item in enumerate(reversed(dados_validados)):
         with st.container():
@@ -148,6 +153,12 @@ if dados_validados:
                 idx = len(dados_validados) - 1 - i
                 dados_validados.pop(idx)
                 local_storage.setItem("pontos_tecnico", dados_validados)
+                time.sleep(0.4)
                 st.rerun()
 else:
-    st.info("Aguardando lançamentos.")
+    st.info("Aguardando lançamentos para calcular produtividade.")
+    
+    # Botão de Reset também na tela inicial caso precise
+    if st.sidebar.button("Refazer Login"):
+        local_storage.setItem("nome_tecnico", "")
+        st.rerun()
