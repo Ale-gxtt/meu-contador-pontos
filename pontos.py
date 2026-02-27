@@ -5,8 +5,15 @@ from streamlit_local_storage import LocalStorage
 import time
 
 # 1. Configuração e Estilo
-st.set_page_config(page_title="Sistema de Produtividade Técnica", page_icon="💰", layout="wide")
+st.set_page_config(page_title="Sistema de Produtividade Técnica", page_icon="📈", layout="wide")
 local_storage = LocalStorage()
+
+# Estilização para as métricas ficarem maiores
+st.markdown("""
+    <style>
+    [data-testid="stMetricValue"] { font-size: 35px; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # 2. Tabela de Pesos
 TABELA_PESOS = {
@@ -30,23 +37,18 @@ def calcular_valor_comissao(porcentagem):
     if porcentagem < 120: return 780.0
     return 900.0
 
-# PONTO CRUCIAL: Contagem de dias úteis (Segunda a Sábado)
 def contar_dias_uteis_mes_completo():
     hoje = datetime.now()
-    # Primeiro dia do mês atual
     temp_dia = hoje.replace(day=1)
-    # Primeiro dia do próximo mês
     if hoje.month == 12:
         proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
     else:
         proximo_mes = hoje.replace(month=hoje.month + 1, day=1)
-    
     ultimo_dia = proximo_mes - timedelta(days=1)
-    
     dias_uteis = 0
     dia_corrente = temp_dia
     while dia_corrente <= ultimo_dia:
-        if dia_corrente.weekday() != 6: # 6 é Domingo. Se for diferente de 6, conta.
+        if dia_corrente.weekday() != 6:
             dias_uteis += 1
         dia_corrente += timedelta(days=1)
     return dias_uteis
@@ -63,9 +65,8 @@ if not nome_usuario:
     st.stop()
 
 # --- TELA PRINCIPAL ---
-st.title(f"Painel de Produtividade: {nome_usuario}")
+st.title(f"📈 Desempenho: {nome_usuario}")
 
-# Recuperação de dados
 dados_brutos = local_storage.getItem("pontos_tecnico") or []
 dados_validados = []
 for item in dados_brutos:
@@ -78,8 +79,8 @@ for item in dados_brutos:
     })
 
 # Registro
-with st.expander("➕ REGISTRAR ATIVIDADE", expanded=True):
-    servico = st.selectbox("Selecione o serviço:", list(TABELA_PESOS.keys()))
+with st.expander("➕ REGISTRAR ATIVIDADE EM CAMPO", expanded=True):
+    servico = st.selectbox("Selecione o serviço finalizado:", list(TABELA_PESOS.keys()))
     if st.button("SALVAR REGISTRO", use_container_width=True):
         novo = {
             "ID": datetime.now().strftime("%H%M%S%f"),
@@ -88,61 +89,66 @@ with st.expander("➕ REGISTRAR ATIVIDADE", expanded=True):
             "Atividade": servico,
             "Pontos": TABELA_PESOS[servico]
         }
-        lista = dados_validados + [novo]
-        local_storage.setItem("pontos_tecnico", lista)
-        st.success("✅ Atividade salva com sucesso!")
+        local_storage.setItem("pontos_tecnico", dados_validados + [novo])
+        st.success(f"🎯 {servico} registrado!")
         time.sleep(0.5)
         st.rerun()
 
-# --- RESULTADOS ---
+# --- RESULTADOS INTERATIVOS ---
 if dados_validados:
     df = pd.DataFrame(dados_validados)
-    total_pts = pd.to_numeric(df['Pontos']).sum()
+    df['Pontos'] = pd.to_numeric(df['Pontos'])
+    total_pts = df['Pontos'].sum()
     
     dias_uteis = contar_dias_uteis_mes_completo()
-    meta_total = dias_uteis * 3.2
-    produtividade = (total_pts / meta_total) * 100
+    meta_mensal = dias_uteis * 3.2
+    produtividade = (total_pts / meta_mensal) * 100
     comissao = calcular_valor_comissao(produtividade)
 
+    # Cálculo de Performance Diária (Seta Verde/Vermelha)
+    hoje_str = datetime.now().strftime("%d/%m/%Y")
+    pontos_hoje = df[df['Data'] == hoje_str]['Pontos'].sum()
+    desvio_hoje = pontos_hoje - 3.2
+
     st.divider()
-    st.subheader("💰 Estimativa de Comissão")
-    
+
+    # Painel Visual de Métricas
     c1, c2, c3 = st.columns(3)
-    c1.metric("Pontos Totais", f"{total_pts:.2f}")
-    c2.metric("Produtividade", f"{produtividade:.1f}%")
-    c3.metric("Bônus Previsto", f"R$ {comissao:.2f}")
+    
+    # Seta Verde/Vermelha baseada na meta diária de 3.2
+    c1.metric("Produção Hoje", f"{pontos_hoje:.2f} pts", delta=f"{desvio_hoje:.2f} vs Meta 3.2", delta_color="normal")
+    
+    # Produtividade com cor dinâmica
+    cor_prod = "green" if produtividade >= 100 else "orange" if produtividade >= 75 else "red"
+    c2.markdown(f"**Produtividade Mensal** \n <h2 style='color:{cor_prod};'>{produtividade:.1f}%</h2>", unsafe_allow_html=True)
+    
+    c3.metric("Estimativa de Comissão", f"R$ {comissao:.2f}")
 
-    st.caption(f"ℹ️ Baseado em **{dias_uteis} dias úteis** neste mês (Meta: {meta_total:.2f} pts). Domingos não contabilizados.")
+    # Gráfico de Evolução Diária
+    st.subheader("📊 Evolução da Pontuação no Mês")
+    df_grafico = df.groupby('Data')['Pontos'].sum().reset_index()
+    st.line_chart(df_grafico.set_index('Data'), color="#29b5e8")
 
-    # --- BARRA LATERAL (CONFIGURAÇÕES) ---
-    st.sidebar.title("⚙️ Opções")
-    if "limpar_clicado" not in st.session_state:
-        st.session_state.limpar_clicado = False
+    st.divider()
 
-    if not st.session_state.limpar_clicado:
-        if st.sidebar.button("🗑️ Limpar Histórico do Mês"):
-            st.session_state.limpar_clicado = True
-            st.rerun()
-    else:
-        st.sidebar.warning("⚠️ VOCÊ TEM CERTEZA? Isso apagará todos os seus registros deste mês.")
-        if st.sidebar.button("✅ SIM, APAGAR TUDO"):
+    # --- BARRA LATERAL ---
+    st.sidebar.title("⚙️ Painel de Controle")
+    if st.sidebar.button("🗑️ Limpar Tudo (Segurança)"):
+        st.session_state.confirmar = True
+
+    if st.session_state.get("confirmar"):
+        st.sidebar.error("Confirmar limpeza total?")
+        if st.sidebar.button("✅ SIM, APAGAR"):
             local_storage.setItem("pontos_tecnico", [])
-            st.session_state.limpar_clicado = False
+            st.session_state.confirmar = False
             st.rerun()
-        if st.sidebar.button("❌ Cancelar"):
-            st.session_state.limpar_clicado = False
+        if st.sidebar.button("❌ CANCELAR"):
+            st.session_state.confirmar = False
             st.rerun()
 
-    # Histórico
-    st.subheader("📋 Histórico Mensal")
-    for i, item in enumerate(reversed(dados_validados)):
-        with st.container():
-            col_txt, col_del = st.columns([6, 1])
-            col_txt.write(f"📅 {item['Data']} | **{item['Atividade']}** ({item['Pontos']} pts)")
-            if col_del.button("🗑️", key=f"del_{item['ID']}"):
-                idx = len(dados_validados) - 1 - i
-                dados_validados.pop(idx)
-                local_storage.setItem("pontos_tecnico", dados_validados)
-                st.rerun()
+    # Histórico detalhado
+    st.subheader("📋 Detalhamento dos Serviços")
+    st.dataframe(df[['Data', 'Hora', 'Atividade', 'Pontos']].iloc[::-1], use_container_width=True)
+
 else:
-    st.info("Aguardando lançamentos para calcular produtividade.")
+    st.info("👋 Bem-vindo! Registre seu primeiro serviço para ativar o gráfico de desempenho.")
