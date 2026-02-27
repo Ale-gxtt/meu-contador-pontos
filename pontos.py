@@ -8,7 +8,7 @@ import time
 st.set_page_config(page_title="Gestão de Produtividade", page_icon="💰", layout="wide")
 local_storage = LocalStorage()
 
-# 2. Tabela de Pesos e Comissão
+# 2. Tabelas Base
 TABELA_PESOS = {
     "INSTALAÇÃO": 1.00, "MUDANÇA DE ENDEREÇO": 1.00, "MIGRAÇÃO DE TECNOLOGIA": 1.00,
     "SUPORTE": 0.70, "SOLICITAÇÃO DE SERVIÇO": 0.60, "MIGRAÇÃO DE PLANO": 0.50,
@@ -37,7 +37,6 @@ def contar_dias_uteis_mes_atual():
         ultimo_dia = hoje.replace(year=hoje.year + 1, month=1, day=1) - timedelta(days=1)
     else:
         ultimo_dia = hoje.replace(month=hoje.month + 1, day=1) - timedelta(days=1)
-    
     dias_uteis = 0
     temp_dia = primeiro_dia
     while temp_dia <= ultimo_dia:
@@ -50,7 +49,7 @@ def contar_dias_uteis_mes_atual():
 nome_usuario = local_storage.getItem("nome_tecnico")
 if not nome_usuario:
     st.title("🚀 Sistema de Produtividade")
-    nome_input = st.text_input("Digite seu nome completo para iniciar:")
+    nome_input = st.text_input("Digite seu nome completo:")
     if st.button("Acessar"):
         if nome_input:
             local_storage.setItem("nome_tecnico", nome_input)
@@ -59,33 +58,24 @@ if not nome_usuario:
 
 # --- INTERFACE ---
 st.title(f"Painel de Produtividade: {nome_usuario.split()[0]}")
-st.error("🚨 **REGRA DE OURO:** Lançou na porta, garantiu a pontuação!")
 
-# --- SOLUÇÃO PARA O ERRO (LIMPEZA E TRATAMENTO) ---
+# Recuperação e Tratamento
 dados_brutos = local_storage.getItem("pontos_tecnico") or []
 dados_validados = []
-
 for item in dados_brutos:
-    # Garante que as chaves existam para não dar KeyError
-    item_valido = {
+    dados_validados.append({
         "ID": item.get("ID", str(time.time())),
         "Data": item.get("Data", "00/00/0000"),
         "Hora": item.get("Hora", "00:00:00"),
-        "Atividade": item.get("Atividade", "Erro de Registro"),
-        "Pontos": item.get("Pontos", item.get("Points", 0.0)) # Aceita ambos os nomes
-    }
-    dados_validados.append(item_valido)
+        "Atividade": item.get("Atividade", "Registro"),
+        "Pontos": item.get("Pontos", item.get("Points", 0.0))
+    })
 
 with st.expander("➕ REGISTRAR SERVIÇO AGORA", expanded=True):
     servico = st.selectbox("O que você finalizou?", list(TABELA_PESOS.keys()))
     if st.button("SALVAR REGISTRO", use_container_width=True):
-        novo = {
-            "ID": datetime.now().strftime("%H%M%S%f"),
-            "Data": datetime.now().strftime("%d/%m/%Y"),
-            "Hora": datetime.now().strftime("%H:%M:%S"),
-            "Atividade": servico,
-            "Pontos": TABELA_PESOS[servico]
-        }
+        novo = {"ID": datetime.now().strftime("%H%M%S%f"), "Data": datetime.now().strftime("%d/%m/%Y"),
+                "Hora": datetime.now().strftime("%H:%M:%S"), "Atividade": servico, "Pontos": TABELA_PESOS[servico]}
         dados_validados.append(novo)
         local_storage.setItem("pontos_tecnico", dados_validados)
         st.success("✅ Registrado!")
@@ -95,38 +85,48 @@ with st.expander("➕ REGISTRAR SERVIÇO AGORA", expanded=True):
 if dados_validados:
     df = pd.DataFrame(dados_validados)
     total_pts = pd.to_numeric(df['Pontos']).sum()
-    
     dias_uteis_mes = contar_dias_uteis_mes_atual()
-    meta_mes_pts = dias_uteis_mes * 3.2
-    percentual_atingido = (total_pts / meta_mes_pts) * 100
-    valor_comissao = calcular_valor_comissao(percentual_atingido)
+    percentual = (total_pts / (dias_uteis_mes * 3.2)) * 100
+    valor_comissao = calcular_valor_comissao(percentual)
 
     st.divider()
-    
-    # Título conforme solicitado (sem parênteses)
     st.subheader("💰 Estimativa de Comissão")
     c1, c2, c3 = st.columns(3)
-    
     c1.metric("Pontos Acumulados", f"{total_pts:.2f} pts")
-    c2.metric("Produtividade Atual", f"{percentual_atingido:.1f}%")
+    c2.metric("Produtividade Atual", f"{percentual:.1f}%")
+    c3.metric("Bônus Previsto", f"R$ {valor_comissao:.2f}")
+
+    # --- BOTÃO DE APAGAR HISTÓRICO COM SEGURANÇA ---
+    st.sidebar.divider()
+    st.sidebar.subheader("⚙️ Configurações de Dados")
     
-    if percentual_atingido >= 75:
-        c3.metric("Bônus Previsto", f"R$ {valor_comissao:.2f}", delta="Faixa Atingida")
+    if "confirmar_limpeza" not in st.session_state:
+        st.session_state.confirmar_limpeza = False
+
+    if not st.session_state.confirmar_limpeza:
+        if st.sidebar.button("🗑️ Limpar Histórico Mensal"):
+            st.session_state.confirmar_limpeza = True
+            st.rerun()
     else:
-        c3.metric("Bônus Previsto", "R$ 0,00", delta="Abaixo de 75%", delta_color="inverse")
+        st.sidebar.warning("⚠️ ATENÇÃO: Ao aceitar, todo o seu histórico de lançamentos será apagado permanentemente.")
+        if st.sidebar.button("✅ CONFIRMAR E APAGAR TUDO"):
+            local_storage.setItem("pontos_tecnico", [])
+            st.session_state.confirmar_limpeza = False
+            st.success("Histórico apagado!")
+            time.sleep(1)
+            st.rerun()
+        if st.sidebar.button("❌ Cancelar"):
+            st.session_state.confirmar_limpeza = False
+            st.rerun()
 
-    st.info(f"💡 Meta do mês: **{meta_mes_pts:.2f} pontos** ({dias_uteis_mes} dias úteis).")
-
-    # --- HISTÓRICO COM BOTÃO DE APAGAR ---
-    st.subheader("📋 Histórico de Lançamentos")
+    st.subheader("📋 Histórico")
     for i, item in enumerate(reversed(dados_validados)):
         with st.container():
-            col_info, col_btn = st.columns([6, 1])
-            col_info.write(f"📅 {item['Data']} às {item['Hora']} - **{item['Atividade']}** ({item['Pontos']} pts)")
-            # Botão de apagar registro
-            if col_btn.button("🗑️", key=f"del_{item['ID']}"):
-                indice_original = len(dados_validados) - 1 - i
-                dados_validados.pop(indice_original)
+            col_i, col_b = st.columns([6, 1])
+            col_i.write(f"📅 {item['Data']} - **{item['Atividade']}** ({item['Pontos']} pts)")
+            if col_b.button("🗑️", key=f"del_{item['ID']}"):
+                indice = len(dados_validados) - 1 - i
+                dados_validados.pop(indice)
                 local_storage.setItem("pontos_tecnico", dados_validados)
                 st.rerun()
 else:
