@@ -67,6 +67,7 @@ for item in dados_brutos:
         dados_validados.append({
             "ID": item.get("ID", str(time.time())),
             "Data": item.get("Data", "00/00/0000"),
+            "Atividade": item.get("Atividade", "Registro"),
             "Pontos": float(item.get("Pontos", 0.0))
         })
 
@@ -105,26 +106,48 @@ if dados_validados:
     c2.metric("Mês", f"{produtividade:.1f}%")
     c3.metric("Comissão", f"R$ {comissao:.2f}")
 
-    # --- BARRA DE PROGRESSO (MAIS SIMPLES QUE GRÁFICO) ---
+    # --- BARRA DE PROGRESSO ---
     st.write(f"**Progresso da Meta Mensal ({total_pts_mes:.1f} de {meta_mensal:.1f} pts)**")
     progresso = min(produtividade / 100, 1.0)
     st.progress(progresso)
 
     # Mensagens de Apoio
     if pts_hoje < 3.2:
-        st.info(f"Faltam **{(3.2 - pts_hoje):.2f} pontos** para a meta de hoje.")
+        st.warning(f"🚩 Faltam **{(3.2 - pts_hoje):.2f} pontos** para a meta de hoje.")
     if produtividade < 100:
-        st.write(f"Faltam **{(meta_mensal - total_pts_mes):.2f} pontos** para atingir 100% no mês.")
+        st.info(f"📅 Faltam **{(meta_mensal - total_pts_mes):.2f} pontos** para atingir 100% no mês.")
 
     st.divider()
 
-    # Histórico Simplificado
-    st.subheader("📋 Últimos Lançamentos")
-    st.table(df[['Data', 'Pontos']].tail(5)) # Mostra só os últimos 5 de forma simples
+    # --- SEGURANÇA NA BARRA LATERAL ---
+    st.sidebar.title("⚙️ Configurações")
+    if "confirmar_limpeza" not in st.session_state:
+        st.session_state.confirmar_limpeza = False
 
-    # Barra Lateral
-    if st.sidebar.button("🗑️ Limpar Mês"):
-        local_storage.setItem("pontos_tecnico", [])
-        st.rerun()
+    if not st.session_state.confirmar_limpeza:
+        if st.sidebar.button("🗑️ Limpar Histórico Mensal"):
+            st.session_state.confirmar_limpeza = True
+            st.rerun()
+    else:
+        st.sidebar.error("⚠️ ATENÇÃO: Apagar todo o histórico?")
+        if st.sidebar.button("✅ SIM, APAGAR"):
+            local_storage.setItem("pontos_tecnico", [])
+            st.session_state.confirmar_limpeza = False
+            st.rerun()
+        if st.sidebar.button("❌ CANCELAR"):
+            st.session_state.confirmar_limpeza = False
+            st.rerun()
+
+    # Histórico para conferência
+    st.subheader("📋 Lançamentos do Mês")
+    for i, item in enumerate(reversed(dados_validados)):
+        with st.container():
+            col_txt, col_del = st.columns([6, 1])
+            col_txt.write(f"📅 {item['Data']} | **{item['Atividade']}** ({item['Pontos']} pts)")
+            if col_del.button("🗑️", key=f"del_{item['ID']}"):
+                idx = len(dados_validados) - 1 - i
+                dados_validados.pop(idx)
+                local_storage.setItem("pontos_tecnico", dados_validados)
+                st.rerun()
 else:
     st.info("Aguardando lançamentos.")
