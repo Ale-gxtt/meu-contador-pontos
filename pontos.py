@@ -5,7 +5,7 @@ from streamlit_local_storage import LocalStorage
 import time
 
 # 1. Configuração e Estilo
-st.set_page_config(page_title="Produtividade Técnica", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Controle de Pontos & Comissão", page_icon="💰", layout="wide")
 local_storage = LocalStorage()
 
 # 2. Tabela de Pesos
@@ -32,7 +32,7 @@ def calcular_valor_comissao(porcentagem):
 
 def contar_dias_uteis_mes_completo():
     hoje = datetime.now()
-    temp_dia = hoje.replace(day=1)
+    temp_dia = hoy = hoje.replace(day=1)
     if hoje.month == 12:
         proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
     else:
@@ -46,24 +46,20 @@ def contar_dias_uteis_mes_completo():
         dia_corrente += timedelta(days=1)
     return dias_uteis
 
-# --- ACESSO PERSISTENTE (CORREÇÃO PARA F5 NO CELULAR) ---
+# --- ACESSO PERSISTENTE ---
 if "nome_tecnico" not in st.session_state:
-    st.session_state.nome_tecnico = None
-
-# Busca no armazenamento local se a sessão estiver vazia
-if st.session_state.nome_tecnico is None:
     st.session_state.nome_tecnico = local_storage.getItem("nome_tecnico")
 
-# Se mesmo assim não tiver nome, mostra a tela de login
 if not st.session_state.nome_tecnico:
-    st.title("🚀 Controle de Pontos & Comissão")
-    nome_input = st.text_input("Digite seu nome completo:")
-    if st.button("Configurar e Entrar"):
+    st.title("🚀 Sistema de Controle de Pontos & Comissão")
+    st.markdown("### Bem-vindo à sua ferramenta de produtividade!")
+    nome_input = st.text_input("Para começar, digite seu nome completo:")
+    if st.button("Configurar Perfil e Acessar ➔", use_container_width=True):
         if nome_input:
             local_storage.setItem("nome_tecnico", nome_input)
             st.session_state.nome_tecnico = nome_input
-            st.success("Configurando perfil...")
-            time.sleep(1.5) # Tempo extra para o celular gravar o nome
+            st.success("Tudo pronto! Entrando...")
+            time.sleep(1.2)
             st.rerun()
     st.stop()
 
@@ -85,8 +81,8 @@ for item in dados_brutos:
         })
 
 # Registro
-with st.expander("➕ LANÇAR SERVIÇO", expanded=True):
-    servico = st.selectbox("O que você finalizou?", list(TABELA_PESOS.keys()))
+with st.expander("➕ LANÇAR NOVO SERVIÇO", expanded=True):
+    servico = st.selectbox("Selecione o serviço finalizado:", list(TABELA_PESOS.keys()))
     if st.button("SALVAR REGISTRO", use_container_width=True):
         novo = {
             "ID": datetime.now().strftime("%H%M%S%f"),
@@ -97,7 +93,7 @@ with st.expander("➕ LANÇAR SERVIÇO", expanded=True):
         dados_validados.append(novo)
         local_storage.setItem("pontos_tecnico", dados_validados)
         st.success("🎯 Salvo!")
-        time.sleep(0.8)
+        time.sleep(0.7)
         st.rerun()
 
 if dados_validados:
@@ -117,31 +113,39 @@ if dados_validados:
     c2.metric("Mês", f"{produtividade:.1f}%")
     c3.metric("Comissão", f"R$ {comissao:.2f}")
 
-    st.write(f"**Progresso Mensal ({total_pts_mes:.1f} de {meta_mensal:.1f} pts)**")
+    st.write(f"**Meta Mensal ({total_pts_mes:.1f} de {meta_mensal:.1f} pts)**")
     st.progress(min(produtividade / 100, 1.0))
 
-    if pts_hoje < 3.2:
-        st.warning(f"🚩 Faltam **{(3.2 - pts_hoje):.2f} pts** para hoje.")
-    else:
-        st.success("✅ Meta diária batida!")
+    # --- BOTÃO PARA BAIXAR HISTÓRICO ---
+    st.subheader("📥 Exportar Dados")
+    csv = df.to_csv(index=False).encode('utf-8-sig')
+    st.download_button(
+        label="📄 BAIXAR HISTÓRICO EM EXCEL (CSV)",
+        data=csv,
+        file_name=f"produtividade_{nome_usuario}_{datetime.now().strftime('%m_%Y')}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
 
     st.divider()
 
     # --- BARRA LATERAL ---
-    if st.sidebar.button("👤 Trocar Usuário"):
+    st.sidebar.title("⚙️ Opções")
+    if st.sidebar.button("👤 TROCAR USUÁRIO / SAIR"):
         local_storage.setItem("nome_tecnico", "")
-        st.session_state.nome_tecnico = None
+        st.session_state.nome_tecnico = ""
+        time.sleep(1.0)
         st.rerun()
 
     if "confirmar_limpeza" not in st.session_state:
         st.session_state.confirmar_limpeza = False
 
     if not st.session_state.confirmar_limpeza:
-        if st.sidebar.button("🗑️ Limpar Histórico Mensal"):
+        if st.sidebar.button("🗑️ Limpar Mês"):
             st.session_state.confirmar_limpeza = True
             st.rerun()
     else:
-        if st.sidebar.button("✅ SIM, APAGAR TUDO"):
+        if st.sidebar.button("✅ SIM, LIMPAR TUDO"):
             local_storage.setItem("pontos_tecnico", [])
             time.sleep(1.0)
             st.session_state.confirmar_limpeza = False
@@ -150,8 +154,8 @@ if dados_validados:
             st.session_state.confirmar_limpeza = False
             st.rerun()
 
-    # Histórico
-    st.subheader("📋 Lançamentos do Mês")
+    # Histórico Visual
+    st.subheader("📋 Lançamentos Realizados")
     for i, item in enumerate(reversed(dados_validados)):
         with st.container():
             col_txt, col_del = st.columns([6, 1])
@@ -160,13 +164,13 @@ if dados_validados:
                 idx = len(dados_validados) - 1 - i
                 dados_validados.pop(idx)
                 local_storage.setItem("pontos_tecnico", dados_validados)
-                st.toast("Excluindo...")
-                time.sleep(0.8)
+                st.toast("Removendo...")
+                time.sleep(0.7)
                 st.rerun()
 else:
     st.info("Aguardando lançamentos.")
-    if st.sidebar.button("👤 Trocar Usuário"):
+    if st.sidebar.button("👤 TROCAR USUÁRIO / SAIR"):
         local_storage.setItem("nome_tecnico", "")
-        st.session_state.nome_tecnico = None
+        st.session_state.nome_tecnico = ""
+        time.sleep(1.0)
         st.rerun()
-
