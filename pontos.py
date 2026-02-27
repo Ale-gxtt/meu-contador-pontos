@@ -33,7 +33,6 @@ def calcular_valor_comissao(porcentagem):
 def contar_dias_uteis_mes_completo():
     hoje = datetime.now()
     temp_dia = hoje.replace(day=1)
-    # Correção do erro 'hoy':
     if hoje.month == 12:
         proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
     else:
@@ -42,15 +41,20 @@ def contar_dias_uteis_mes_completo():
     dias_uteis = 0
     dia_corrente = temp_dia
     while dia_corrente <= ultimo_dia:
-        if dia_corrente.weekday() != 6: # Domingo não conta
+        if dia_corrente.weekday() != 6:
             dias_uteis += 1
         dia_corrente += timedelta(days=1)
     return dias_uteis
 
-# --- ACESSO PERSISTENTE ---
+# --- ACESSO PERSISTENTE (CORREÇÃO PARA F5 NO CELULAR) ---
 if "nome_tecnico" not in st.session_state:
+    st.session_state.nome_tecnico = None
+
+# Busca no armazenamento local se a sessão estiver vazia
+if st.session_state.nome_tecnico is None:
     st.session_state.nome_tecnico = local_storage.getItem("nome_tecnico")
 
+# Se mesmo assim não tiver nome, mostra a tela de login
 if not st.session_state.nome_tecnico:
     st.title("🚀 Sistema de Gestão Regional")
     nome_input = st.text_input("Digite seu nome completo:")
@@ -58,6 +62,8 @@ if not st.session_state.nome_tecnico:
         if nome_input:
             local_storage.setItem("nome_tecnico", nome_input)
             st.session_state.nome_tecnico = nome_input
+            st.success("Configurando perfil...")
+            time.sleep(1.5) # Tempo extra para o celular gravar o nome
             st.rerun()
     st.stop()
 
@@ -70,7 +76,6 @@ dados_brutos = local_storage.getItem("pontos_tecnico") or []
 dados_validados = []
 for item in dados_brutos:
     if isinstance(item, dict):
-        # Correção do erro 'KeyError': unificando para 'Pontos'
         pts = item.get("Pontos") if item.get("Pontos") is not None else item.get("Points", 0.0)
         dados_validados.append({
             "ID": item.get("ID", str(time.time())),
@@ -92,7 +97,7 @@ with st.expander("➕ LANÇAR SERVIÇO", expanded=True):
         dados_validados.append(novo)
         local_storage.setItem("pontos_tecnico", dados_validados)
         st.success("🎯 Salvo!")
-        time.sleep(0.6)
+        time.sleep(0.8)
         st.rerun()
 
 if dados_validados:
@@ -116,7 +121,7 @@ if dados_validados:
     st.progress(min(produtividade / 100, 1.0))
 
     if pts_hoje < 3.2:
-        st.warning(f"🚩 Faltam **{(3.2 - pts_hoje):.2f} pts** para a meta de hoje.")
+        st.warning(f"🚩 Faltam **{(3.2 - pts_hoje):.2f} pts** para hoje.")
     else:
         st.success("✅ Meta diária batida!")
 
@@ -150,7 +155,6 @@ if dados_validados:
     for i, item in enumerate(reversed(dados_validados)):
         with st.container():
             col_txt, col_del = st.columns([6, 1])
-            # Correção final: usando apenas 'Pontos' que foi validado acima
             col_txt.write(f"📅 {item['Data']} | **{item['Atividade']}** ({item['Pontos']} pts)")
             if col_del.button("🗑️", key=f"del_{item['ID']}"):
                 idx = len(dados_validados) - 1 - i
@@ -161,3 +165,7 @@ if dados_validados:
                 st.rerun()
 else:
     st.info("Aguardando lançamentos.")
+    if st.sidebar.button("👤 Trocar Usuário"):
+        local_storage.setItem("nome_tecnico", "")
+        st.session_state.nome_tecnico = None
+        st.rerun()
